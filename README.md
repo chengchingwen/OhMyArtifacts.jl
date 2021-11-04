@@ -18,7 +18,7 @@ using MyArtifacts
 const my_artifact = Ref{String}()
 
 function __init__()
-    my_artifact[] = my_artifacts_toml!(@__MODULE__)
+    my_artifact[] = @my_artifacts_toml!()
     return
 end
 

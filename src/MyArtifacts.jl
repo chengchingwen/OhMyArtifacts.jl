@@ -44,13 +44,20 @@ function modified_time(file)
     return Dates.unix2datetime(mtime(file)) + round(now() - now(Dates.UTC), Hour)
 end
 
-export my_artifacts_toml!, create_my_artifact, bind_my_artifact!,
+export my_artifacts_toml!, @my_artifacts_toml!, create_my_artifact, bind_my_artifact!,
     my_artifact_hash, my_artifact_path, my_artifact_exists
 
 function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
     uuid = Scratch.find_uuid(pkg)
     path = get_scratch!(@__MODULE__, string(uuid), pkg)
     return touch(joinpath(path, "Artifacts.toml"))
+end
+
+macro my_artifacts_toml!()
+    uuid = Base.PkgId(__module__).uuid
+    return quote
+        my_artifacts_toml!($(esc(uuid)))
+    end
 end
 
 ## SHA256 ##
