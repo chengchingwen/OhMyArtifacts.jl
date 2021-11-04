@@ -29,9 +29,16 @@ function __init__()
     ARTIFACTS_DIR[] = @get_scratch!("artifacts")
     SCRATCH_DIR[] = dirname(ARTIFACTS_DIR[])
 
-    find_orphanages()
+    orphan_file = orphanages_toml_path()
+    last_gc_time = isfile(orphan_file) ? modified_time(orphan_file) : now()
+    if now() - last_gc_time >= Day(7)
+        find_orphanages()
+    end
+
     return
 end
+
+orphanages_toml_path() = joinpath(first(Base.DEPOT_PATH), "logs", "my_artifact_orphanages.toml")
 
 function modified_time(file)
     return Dates.unix2datetime(mtime(file)) + round(now() - now(Dates.UTC), Hour)
@@ -238,7 +245,7 @@ function unbind_my_artifact!(artifacts_toml::String, name::String)
 end
 
 function orphanages_toml()
-    path = joinpath(first(Base.DEPOT_PATH), "logs", "my_artifact_orphanages.toml")
+    path = orphanages_toml_path()
     mkpath(dirname(path))
     touch(path)
 end
