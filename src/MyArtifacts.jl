@@ -126,11 +126,16 @@ function create_my_artifact(f::Function)
         new_path = joinpath(artifacts_dir, string(artifact_hash))
 
         # skip if file already exist
-        if !isfile(new_path)
-            mv(filepath, new_path)
-            fmode = filemode(new_path)
-            # read-only
-            chmod(new_path, fmode & (typemax(fmode) ⊻ 0o222))
+        filelock = mkpidlock(joinpath(dirname(new_path), "$(string(artifact_hash)).lock"))
+        try
+            if !isfile(new_path)
+                mv(filepath, new_path)
+                fmode = filemode(new_path)
+                # read-only
+                chmod(new_path, fmode & (typemax(fmode) ⊻ 0o222))
+            end
+        finally
+            close(filelock)
         end
 
         return artifact_hash
