@@ -30,7 +30,12 @@ function __init__()
     SCRATCH_DIR[] = dirname(ARTIFACTS_DIR[])
 
     orphan_file = orphanages_toml_path()
-    last_gc_time = isfile(orphan_file) ? modified_time(orphan_file) : now()
+    last_gc_time = if isfile(orphan_file)
+        modified_time(orphan_file)
+    else
+        orphanages_toml()
+        now()
+    end
     if now() - last_gc_time >= Day(7)
         find_orphanages()
     end
