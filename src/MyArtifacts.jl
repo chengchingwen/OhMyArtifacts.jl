@@ -33,6 +33,10 @@ function __init__()
     return
 end
 
+function modified_time(file)
+    return Dates.unix2datetime(mtime(file)) + round(now() - now(Dates.UTC), Hour)
+end
+
 export my_artifacts_toml!, create_my_artifact, bind_my_artifact!,
     my_artifact_hash, my_artifact_path, my_artifact_exists
 
@@ -250,8 +254,19 @@ function find_orphanages(; collect_delay::Period=Day(7))
             Dict{String, Any}()
         end
 
+        # find orphan artifacts
         orphanage = Pair{String, DateTime}[]
+
+        # artifact without binding
+        for artifact_path in readdir(MyArtifacts.get_artifacts_dir(), join=true)
+            if !haskey(usage_toml, artifact_path)
+                push!(orphanage, artifact_path=>modified_time(artifact_path))
+            end
+        end
+
+        # artifact with binding
         for (artifact_path, usage_dict) in usage_toml
+            # check if all bindings are removed
             last_used_time = nothing
 
             for (artifacts_toml, entrys) in usage_dict
@@ -283,7 +298,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
             if isempty(usage_dict)
                 # no usage of this artifact exist, mark it as orphan
                 if isnothing(last_used_time)
-                    last_used_time = now()
+                    last_used_time = modified_time(artifact_path)
                 end
                 push!(orphanage, artifact_path=>last_used_time)
                 delete!(usage_toml, artifact_path)
