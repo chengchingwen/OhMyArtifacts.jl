@@ -43,7 +43,7 @@ function __init__()
     return
 end
 
-orphanages_toml_path() = joinpath(first(Base.DEPOT_PATH), "logs", "my_artifact_orphanages.toml")
+orphanages_toml_path() = joinpath(get_scratch_dir(), "my_artifact_orphanages.toml")
 
 function modified_time(file)
     return Dates.unix2datetime(mtime(file)) + round(now() - now(Dates.UTC), Hour)
@@ -191,7 +191,7 @@ function bind_my_artifact!(artifacts_toml::String, name::String, hash::SHA256; f
 end
 
 function usages_toml()
-    path = joinpath(first(Base.DEPOT_PATH), "logs", "my_artifact_usage.toml")
+    path = joinpath(get_scratch_dir(), "my_artifact_usage.toml")
     mkpath(dirname(path))
     touch(path)
 end
