@@ -156,7 +156,7 @@ end
 function my_artifact_hash(name::String, artifacts_toml::String)
     artifact_dict = load_my_artifacts_toml(artifacts_toml)
     if haskey(artifact_dict, name)
-        return artifact_dict[name]["sha256"]
+        return SHA256(artifact_dict[name]["sha256"])
     else
         return nothing
     end
