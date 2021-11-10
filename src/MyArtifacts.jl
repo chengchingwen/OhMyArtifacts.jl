@@ -39,6 +39,14 @@ export my_artifacts_toml!, @my_artifacts_toml!, create_my_artifact, bind_my_arti
     my_artifact_hash, my_artifact_path, my_artifact_exists,
     @my_artifact
 
+
+"""
+    my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
+
+Return the path to (or creates) "Artifacts.toml" for the given `pkg`.
+
+See also: [`@my_artifacts_toml!`](@ref)
+"""
 function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
     uuid = Scratch.find_uuid(pkg)
     path = get_scratch!(@__MODULE__, string(uuid), pkg)
@@ -83,6 +91,13 @@ end
 
 ## macros
 
+"""
+    @my_artifacts_toml!()
+
+Convenience macro that gets/creates a "Artifacts.toml" and parented to the package the calling module belongs to.
+
+See also: [`my_artifacts_toml!`](@ref)
+"""
 macro my_artifacts_toml!()
     uuid = Base.PkgId(__module__).uuid
     return quote
@@ -106,6 +121,21 @@ function cached_my_artifact_toml_expr(mod::Module)
     end
 end
 
+"""
+    @my_artifact op name [hash]
+
+Convenient macro for working with "Artifacts.toml". Requiring a global variable `my_artifacts` storing the path
+ to "Artifacts.toml" (created by `@my_artifacts_toml!`) to work correctly.
+
+Usage:
+
+1. `@my_artifact :bind name hash` => `bind_my_artifact!(my_artifacts, name, hash)`
+2. `@my_artifact :hash name` => `my_artifact_hash(name, my_artifacts)`
+3. `@my_artifact :unbind name` => `unbind_my_artifact!(my_artifacts, name)`
+
+See also: [`bind_my_artifact!`](@ref), [`my_artifact_hash`](@ref),
+ [`unbind_my_artifact!`](@ref), [`@my_artifacts_toml`](@ref)
+"""
 macro my_artifact(op, name, ex...)
     toml_path = cached_my_artifact_toml_expr(__module__)
     if isnothing(toml_path)
@@ -168,6 +198,11 @@ function load_my_artifacts_toml(artifacts_toml::String)
     return artifact_dict
 end
 
+"""
+    my_artifact_hash(name::String, artifacts_toml::String)
+
+Return the hash found in `artifacts_toml` with given `name`, or `nothing` if not found.
+"""
 function my_artifact_hash(name::String, artifacts_toml::String)
     artifact_dict = load_my_artifacts_toml(artifacts_toml)
     if haskey(artifact_dict, name)
@@ -177,15 +212,36 @@ function my_artifact_hash(name::String, artifacts_toml::String)
     end
 end
 
+"""
+    my_artifact_path(hash::SHA256)
+
+Given an artifact (identified by SHA256 content hash), return its installation path. If the artifact does not exist,
+ returns the location it would be installed to.
+
+See also: [`my_artifact_exists`](@ref)
+"""
 function my_artifact_path(hash::SHA256)
     artifacts_dir = get_artifacts_dir()
     return joinpath(artifacts_dir, string(hash))
 end
 
+"""
+    my_artifact_exists(hash::SHA256)
+
+Returns whether or not the given artifact (identified by its SHA256 content hash) exists on-disk.
+"""
 function my_artifact_exists(hash::SHA256)
     return isfile(my_artifact_path(hash))
 end
 
+"""
+    create_my_artifact(f::Function)
+
+Creates a new artifact by doing `path = f(working_dir)`, hashing the returned `path`, and moving it to
+ the artifact store. Returns the identifying hash of this artifact.
+
+`f(working_dir)` should return an absolute path to a single file at the top level of `working_dir`.
+"""
 function create_my_artifact(f::Function)
     artifacts_dir = get_artifacts_dir()
     temp_dir = mktempdir(artifacts_dir)
@@ -225,6 +281,12 @@ function create_my_artifact(f::Function)
     end
 end
 
+"""
+    bind_my_artifact!(artifacts_toml::String, name::String, hash::SHA256; force::Bool = false)
+
+Writes a mapping of `name` -> `hash` within the given "Artifacts.toml" file. If `force` is set to `true`,
+ this will overwrite a pre-existant mapping, otherwise an error is raised.
+"""
 function bind_my_artifact!(artifacts_toml::String, name::String, hash::SHA256; force::Bool = false)
     artifact_lock = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock"))
     try
@@ -290,6 +352,11 @@ function track_my_artifacts(artifacts_toml::String, name::String, hash::SHA256)
     return
 end
 
+"""
+    unbind_my_artifact!(artifacts_toml::String, name::String)
+
+Unbind the given `name` from the "Artifacts.toml" file. Silently fails if no such binding exists within the file.
+"""
 function unbind_my_artifact!(artifacts_toml::String, name::String)
     artifact_lock = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock"))
     try
