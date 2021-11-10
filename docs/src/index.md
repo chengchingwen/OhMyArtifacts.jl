@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = MyArtifacts
+CurrentModule = OhMyArtifacts
 ```
 
-# MyArtifacts
+# OhMyArtifacts
 
-Documentation for [MyArtifacts](https://github.com/chengchingwen/MyArtifacts.jl).
+Documentation for [OhMyArtifacts](https://github.com/chengchingwen/OhMyArtifacts.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [MyArtifacts]
+Modules = [OhMyArtifacts]
 ```

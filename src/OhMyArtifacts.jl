@@ -1,4 +1,4 @@
-module MyArtifacts
+module OhMyArtifacts
 
 using Pkg
 using Pkg.Artifacts
@@ -57,7 +57,7 @@ end
 ## utilities
 
 function get_scratch_dir()
-    return mkpath(scratch_dir(string(Base.PkgId(MyArtifacts).uuid)))
+    return mkpath(scratch_dir(string(Base.PkgId(@__MODULE__).uuid)))
 end
 
 function get_artifacts_dir()
@@ -397,7 +397,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
         orphanage = Pair{String, DateTime}[]
 
         # artifact without binding
-        for artifact_path in readdir(MyArtifacts.get_artifacts_dir(), join=true)
+        for artifact_path in readdir(get_artifacts_dir(), join=true)
             if !haskey(usage_toml, artifact_path)
                 push!(orphanage, artifact_path=>modified_time(artifact_path))
             end

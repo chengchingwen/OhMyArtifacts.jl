@@ -1,16 +1,16 @@
-using MyArtifacts
+using OhMyArtifacts
 using Documenter
 
-DocMeta.setdocmeta!(MyArtifacts, :DocTestSetup, :(using MyArtifacts); recursive=true)
+DocMeta.setdocmeta!(OhMyArtifacts, :DocTestSetup, :(using OhMyArtifacts); recursive=true)
 
 makedocs(;
-    modules=[MyArtifacts],
+    modules=[OhMyArtifacts],
     authors="chengchingwen <adgjl5645@hotmail.com> and contributors",
-    repo="https://github.com/chengchingwen/MyArtifacts.jl/blob/{commit}{path}#{line}",
-    sitename="MyArtifacts.jl",
+    repo="https://github.com/chengchingwen/OhMyArtifacts.jl/blob/{commit}{path}#{line}",
+    sitename="OhMyArtifacts.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://chengchingwen.github.io/MyArtifacts.jl",
+        canonical="https://chengchingwen.github.io/OhMyArtifacts.jl",
         assets=String[],
     ),
     pages=[
@@ -19,5 +19,5 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/chengchingwen/MyArtifacts.jl",
+    repo="github.com/chengchingwen/OhMyArtifacts.jl",
 )

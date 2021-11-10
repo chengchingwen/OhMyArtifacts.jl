@@ -54,7 +54,7 @@ uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 [[Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 
-[[MyArtifacts]]
+[[OhMyArtifacts]]
 path = ".."
 uuid = "cf8be1f4-309d-442e-839d-29d2a0af6cb7"
 version = "0.1.0"

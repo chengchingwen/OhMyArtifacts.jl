@@ -1,9 +1,9 @@
-# MyArtifacts
+# OhMyArtifacts
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://chengchingwen.github.io/MyArtifacts.jl/stable)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://chengchingwen.github.io/MyArtifacts.jl/dev)
-[![Build Status](https://github.com/chengchingwen/MyArtifacts.jl/workflows/CI/badge.svg)](https://github.com/chengchingwen/MyArtifacts.jl/actions)
-[![Coverage](https://codecov.io/gh/chengchingwen/MyArtifacts.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/chengchingwen/MyArtifacts.jl)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://chengchingwen.github.io/OhMyArtifacts.jl/stable)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://chengchingwen.github.io/OhMyArtifacts.jl/dev)
+[![Build Status](https://github.com/chengchingwen/OhMyArtifacts.jl/workflows/CI/badge.svg)](https://github.com/chengchingwen/OhMyArtifacts.jl/actions)
+[![Coverage](https://codecov.io/gh/chengchingwen/OhMyArtifacts.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/chengchingwen/OhMyArtifacts.jl)
 
 Dynamic-created artifacts stored in scratchspace with single file content hash,
  for managing files that is unpacked and have many same subfiles.
@@ -13,7 +13,7 @@ Dynamic-created artifacts stored in scratchspace with single file content hash,
 ```julia
 module TestMod
 
-using MyArtifacts
+using OhMyArtifacts
 
 const my_artifact = Ref{String}()
 

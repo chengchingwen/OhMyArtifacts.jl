@@ -55,9 +55,9 @@ jobs:
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
-            using MyArtifacts
-            DocMeta.setdocmeta!(MyArtifacts, :DocTestSetup, :(using MyArtifacts); recursive=true)
-            doctest(MyArtifacts)'
+            using OhMyArtifacts
+            DocMeta.setdocmeta!(OhMyArtifacts, :DocTestSetup, :(using OhMyArtifacts); recursive=true)
+            doctest(OhMyArtifacts)'
       - run: julia --project=docs docs/make.jl
         env:
           JULIA_PKG_SERVER: ""
