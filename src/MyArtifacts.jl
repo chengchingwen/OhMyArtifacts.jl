@@ -339,17 +339,13 @@ function find_orphanages(; collect_delay::Period=Day(7))
         end
 
         # artifact with binding
+        curr_gc_time = now()
         for (artifact_path, usage_dict) in usage_toml
             # check if all bindings are removed
-            last_used_time = nothing
 
             for (artifacts_toml, entrys) in usage_dict
                 if !isfile(artifacts_toml)
                     # the toml is already removed, so no such usage exist
-                    if length(entrys) > 0
-                        mtime = maximum(values(entrys))
-                        last_used_time = isnothing(last_used_time) ? mtime : max(last_used_time, mtime)
-                    end
                     delete!(usage_dict, artifacts_toml)
                 else
                     # else we read the toml
@@ -358,8 +354,6 @@ function find_orphanages(; collect_delay::Period=Day(7))
                     # check that all usage entry is still exist, or remove them
                     for entry in keys(entrys)
                         if !haskey(artifact_dict, entry)
-                            used_time = entrys[entry]
-                            last_used_time = isnothing(last_used_time) ? used_time : max(last_used_time, used_time)
                             delete!(entrys, entry)
                         end
                     end
@@ -370,11 +364,9 @@ function find_orphanages(; collect_delay::Period=Day(7))
             end
 
             if isempty(usage_dict)
-                # no usage of this artifact exist, mark it as orphan
-                if isnothing(last_used_time)
-                    last_used_time = modified_time(artifact_path)
-                end
-                push!(orphanage, artifact_path=>last_used_time)
+                # no usage of this artifact exist
+                # mark it as orphan and record the current time
+                push!(orphanage, artifact_path=>curr_gc_time)
                 delete!(usage_toml, artifact_path)
             end
         end
@@ -386,20 +378,22 @@ function find_orphanages(; collect_delay::Period=Day(7))
             end
         end
 
-        # update the orphanage list
+        # update the orphanage file
         old_orphans = if isfile(orphanage_file)
             parse_toml(orphanage_file)
         else
             Dict{String, DateTime}()
         end
-        new_orphans = merge(old_orphans, Dict(orphanage))
+        # merge old and new orphan list
+        # *notice*: if the entry already on the list, keep the old recorded time
+        new_orphans = merge(Dict(orphanage), old_orphans)
 
         # mark orphanage for deletion
         gc_time = now()
         deletion_list = String[]
         for artifact_path in keys(new_orphans)
-            last_used_time = new_orphans[artifact_path]
-            if gc_time - last_used_time >= collect_delay
+            last_gc_time = new_orphans[artifact_path]
+            if gc_time - last_gc_time >= collect_delay
                 push!(deletion_list, artifact_path)
                 delete!(new_orphans, artifact_path)
             end
