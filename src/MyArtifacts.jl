@@ -57,13 +57,11 @@ end
 ## utilities
 
 function get_scratch_dir()
-    global SCRATCH_DIR
-    return SCRATCH_DIR[]
+    return mkpath(scratch_dir(string(Base.PkgId(MyArtifacts).uuid)))
 end
 
 function get_artifacts_dir()
-    global ARTIFACTS_DIR
-    return ARTIFACTS_DIR[]
+    return mkpath(joinpath(get_scratch_dir(), "artifacts"))
 end
 
 function get_artifacts_toml_sym()
