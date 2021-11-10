@@ -15,21 +15,6 @@ const ARTIFACTS_DIR = Ref{String}()
 
 const ARTIFACTS_TOML_VAR_SYM = Ref{Symbol}(:my_artifacts)
 
-function get_scratch_dir()
-    global SCRATCH_DIR
-    return SCRATCH_DIR[]
-end
-
-function get_artifacts_dir()
-    global ARTIFACTS_DIR
-    return ARTIFACTS_DIR[]
-end
-
-function get_artifacts_toml_sym()
-    global ARTIFACTS_TOML_VAR_SYM
-    return ARTIFACTS_TOML_VAR_SYM[]
-end
-
 function __init__()
     global SCRATCH_DIR, ARTIFACTS_DIR
     # create scratch space
@@ -50,12 +35,6 @@ function __init__()
     return
 end
 
-orphanages_toml_path() = joinpath(get_scratch_dir(), "my_artifact_orphanages.toml")
-
-function modified_time(file)
-    return Dates.unix2datetime(mtime(file)) + round(now() - now(Dates.UTC), Hour)
-end
-
 export my_artifacts_toml!, @my_artifacts_toml!, create_my_artifact, bind_my_artifact!,
     my_artifact_hash, my_artifact_path, my_artifact_exists,
     @my_artifact
@@ -64,6 +43,42 @@ function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
     uuid = Scratch.find_uuid(pkg)
     path = get_scratch!(@__MODULE__, string(uuid), pkg)
     return touch(joinpath(path, "Artifacts.toml"))
+end
+
+
+## utilities
+
+function get_scratch_dir()
+    global SCRATCH_DIR
+    return SCRATCH_DIR[]
+end
+
+function get_artifacts_dir()
+    global ARTIFACTS_DIR
+    return ARTIFACTS_DIR[]
+end
+
+function get_artifacts_toml_sym()
+    global ARTIFACTS_TOML_VAR_SYM
+    return ARTIFACTS_TOML_VAR_SYM[]
+end
+
+orphanages_toml_path() = joinpath(get_scratch_dir(), "my_artifact_orphanages.toml")
+
+function orphanages_toml()
+    path = orphanages_toml_path()
+    mkpath(dirname(path))
+    touch(path)
+end
+
+function usages_toml()
+    path = joinpath(get_scratch_dir(), "my_artifact_usage.toml")
+    mkpath(dirname(path))
+    touch(path)
+end
+
+function modified_time(file)
+    return Dates.unix2datetime(mtime(file)) + round(now() - now(Dates.UTC), Hour)
 end
 
 ## macros
@@ -237,12 +252,6 @@ function bind_my_artifact!(artifacts_toml::String, name::String, hash::SHA256; f
     return
 end
 
-function usages_toml()
-    path = joinpath(get_scratch_dir(), "my_artifact_usage.toml")
-    mkpath(dirname(path))
-    touch(path)
-end
-
 function track_my_artifacts(artifacts_toml::String, name::String, hash::SHA256)
     artifacts_dir = get_artifacts_dir()
 
@@ -301,12 +310,6 @@ function unbind_my_artifact!(artifacts_toml::String, name::String)
         close(artifact_lock)
     end
     return
-end
-
-function orphanages_toml()
-    path = orphanages_toml_path()
-    mkpath(dirname(path))
-    touch(path)
 end
 
 function find_orphanages(; collect_delay::Period=Day(7))
