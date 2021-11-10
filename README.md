@@ -5,8 +5,8 @@
 [![Build Status](https://github.com/chengchingwen/OhMyArtifacts.jl/workflows/CI/badge.svg)](https://github.com/chengchingwen/OhMyArtifacts.jl/actions)
 [![Coverage](https://codecov.io/gh/chengchingwen/OhMyArtifacts.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/chengchingwen/OhMyArtifacts.jl)
 
-Dynamic-created artifacts stored in scratchspace with single file content hash,
- for managing files that is unpacked and have many same subfiles.
+Automatically manage the `Artifacts.toml` configuration file by downloading files and calculating their hash.
+This is useful for managing files that have many subfiles.
 
 # API overview
 
