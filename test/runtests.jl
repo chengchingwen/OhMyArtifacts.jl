@@ -1,6 +1,71 @@
-using MyArtifacts
+using MyArtifacts, Pkg, Dates
+using Scratch
 using Test
+include("utils.jl")
 
-@testset "MyArtifacts.jl" begin
-    # Write your tests here.
+# Set to true for verbose Pkg output
+const verbose = false
+global const pkgio = verbose ? stderr : (VERSION < v"1.6.0-DEV.254" ? mktemp()[2] : devnull)
+
+@testset "MyArtifacts.jl Basics" begin
+    temp_pkg_dir() do project_dir
+        artifacts_toml = @my_artifacts_toml!()
+        @test isdir(MyArtifacts.get_scratch_dir())
+        @test isdir(MyArtifacts.get_artifacts_dir())
+        @test isfile(artifacts_toml)
+        @test startswith(artifacts_toml, MyArtifacts.get_scratch_dir())
+        @test isempty(MyArtifacts.load_my_artifacts_toml(artifacts_toml))
+
+        hash_a = create_my_artifact() do artifact_dir
+            cp(@__FILE__, joinpath(artifact_dir, "a"))
+        end
+        hash_b = create_my_artifact() do artifact_dir
+            cp(joinpath(@__DIR__, "utils.jl"), joinpath(artifact_dir, "a"))
+        end
+        @test isfile(joinpath(MyArtifacts.get_artifacts_dir(), string(hash_a)))
+        @test isfile(joinpath(MyArtifacts.get_artifacts_dir(), string(hash_b)))
+        @test isfile(my_artifact_path(hash_a))
+        @test isfile(my_artifact_path(hash_b))
+        @test my_artifact_exists(hash_a)
+        @test my_artifact_exists(hash_b)
+
+        bind_my_artifact!(artifacts_toml, "runtestfile", hash_a)
+        bind_my_artifact!(artifacts_toml, "utils.jl", hash_b)
+        @test length(MyArtifacts.load_my_artifacts_toml(artifacts_toml)) == 2
+        @test my_artifact_hash("runtestfile", artifacts_toml) == hash_a
+        @test my_artifact_hash("utils.jl", artifacts_toml) == hash_b
+
+        usagefile = MyArtifacts.usages_toml()
+        @test isfile(usagefile)
+        usage = MyArtifacts.parse_toml(usagefile)
+        @test length(usage) == 2
+        @test length(usage[my_artifact_path(hash_a)]) == 1
+        @test length(usage[my_artifact_path(hash_b)]) == 1
+        @test now() - usage[my_artifact_path(hash_a)][artifacts_toml]["runtestfile"] < Day(1)
+        @test now() - usage[my_artifact_path(hash_b)][artifacts_toml]["utils.jl"] < Day(1)
+
+        MyArtifacts.unbind_my_artifact!(artifacts_toml, "utils.jl")
+        @test length(MyArtifacts.load_my_artifacts_toml(artifacts_toml)) == 1
+        @test my_artifact_exists(hash_a)
+        @test my_artifact_exists(hash_b)
+
+        orphanfile = MyArtifacts.orphanages_toml()
+        @test isfile(orphanfile)
+        orphan = MyArtifacts.parse_toml(orphanfile)
+        @test isempty(orphan)
+
+        MyArtifacts.find_orphanages()
+        orphan = MyArtifacts.parse_toml(orphanfile)
+        @test length(orphan) == 1
+        @test now() - orphan[my_artifact_path(hash_b)] < Day(1)
+        @test my_artifact_exists(hash_a)
+        @test my_artifact_exists(hash_b)
+
+        MyArtifacts.find_orphanages(; collect_delay=Hour(0))
+        orphan = MyArtifacts.parse_toml(orphanfile)
+        @test isempty(orphan)
+        @test my_artifact_exists(hash_a)
+        @test !my_artifact_exists(hash_b)
+
+    end
 end
