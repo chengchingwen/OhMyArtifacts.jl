@@ -13,6 +13,8 @@ using Pidfile
 const SCRATCH_DIR = Ref{String}()
 const ARTIFACTS_DIR = Ref{String}()
 
+const ARTIFACTS_TOML_VAR_SYM = Ref{Symbol}(:my_artifacts)
+
 function get_scratch_dir()
     global SCRATCH_DIR
     return SCRATCH_DIR[]
@@ -21,6 +23,11 @@ end
 function get_artifacts_dir()
     global ARTIFACTS_DIR
     return ARTIFACTS_DIR[]
+end
+
+function get_artifacts_toml_sym()
+    global ARTIFACTS_TOML_VAR_SYM
+    return ARTIFACTS_TOML_VAR_SYM[]
 end
 
 function __init__()
@@ -50,7 +57,8 @@ function modified_time(file)
 end
 
 export my_artifacts_toml!, @my_artifacts_toml!, create_my_artifact, bind_my_artifact!,
-    my_artifact_hash, my_artifact_path, my_artifact_exists
+    my_artifact_hash, my_artifact_path, my_artifact_exists,
+    @my_artifact
 
 function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
     uuid = Scratch.find_uuid(pkg)
@@ -58,10 +66,49 @@ function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
     return touch(joinpath(path, "Artifacts.toml"))
 end
 
+## macros
+
 macro my_artifacts_toml!()
     uuid = Base.PkgId(__module__).uuid
     return quote
         my_artifacts_toml!($(esc(uuid)))
+    end
+end
+
+function cached_my_artifact_toml_path(mod::Module)
+    sym = get_artifacts_toml_sym()
+    !isdefined(mod, sym) && return nothing
+    path = getfield(mod, sym)
+    return (path isa Ref ? path[] : path)::String
+end
+
+function cached_my_artifact_toml_expr(mod::Module)
+    sym = get_artifacts_toml_sym()
+    !isdefined(mod, sym) && return nothing
+    return quote
+        path = getfield($mod, $(QuoteNode(sym)))
+        (path isa Ref ? path[] : path)::String
+    end
+end
+
+macro my_artifact(op, name, ex...)
+    toml_path = cached_my_artifact_toml_expr(__module__)
+    if isnothing(toml_path)
+        error("no cached path for my artifact toml: $(__module__).$(get_artifacts_toml_sym()) undefined.")
+    end
+
+    if op == :bind || op == :(:bind)
+        !isone(length(ex)) && error("wrong number of arguments for :bind, need \$name and \$hash.")
+        hash = ex[1]
+        return :(bind_my_artifact!($(toml_path), $(esc(name)), $(esc(hash))))
+    elseif op == :hash || op == :(:hash)
+        !iszero(length(ex)) && error("wrong number of arguments for :hash, need \$name.")
+        return :(my_artifact_hash($(esc(name)), $(toml_path)))
+    elseif op == :unbind || op == :(:unbind)
+        !iszero(length(ex)) && error("wrong number of arguments for :unbind, need \$name.")
+        return :(unbind_my_artifact!($(toml_path), $(esc(name))))
+    else
+        error("unknown artifact op: $op")
     end
 end
 
