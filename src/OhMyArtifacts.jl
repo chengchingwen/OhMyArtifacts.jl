@@ -197,11 +197,11 @@ function load_my_artifacts_toml(artifacts_toml::String)
 end
 
 """
-    my_artifact_hash(name::String, artifacts_toml::String)
+    my_artifact_hash(name::AbstractString, artifacts_toml::String)
 
 Return the hash found in `artifacts_toml` with given `name`, or `nothing` if not found.
 """
-function my_artifact_hash(name::String, artifacts_toml::String)
+function my_artifact_hash(name::AbstractString, artifacts_toml::String)
     artifact_dict = load_my_artifacts_toml(artifacts_toml)
     if haskey(artifact_dict, name)
         return SHA256(artifact_dict[name]["sha256"])
@@ -280,12 +280,12 @@ function create_my_artifact(f::Function)
 end
 
 """
-    bind_my_artifact!(artifacts_toml::String, name::String, hash::SHA256; force::Bool = false)
+    bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false)
 
 Writes a mapping of `name` -> `hash` within the given "Artifacts.toml" file. If `force` is set to `true`,
  this will overwrite a pre-existant mapping, otherwise an error is raised.
 """
-function bind_my_artifact!(artifacts_toml::String, name::String, hash::SHA256; force::Bool = false)
+function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false)
     artifact_lock = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock"))
     try
         artifact_dict = parse_toml(artifacts_toml)
@@ -312,7 +312,7 @@ function bind_my_artifact!(artifacts_toml::String, name::String, hash::SHA256; f
     return
 end
 
-function track_my_artifacts(artifacts_toml::String, name::String, hash::SHA256)
+function track_my_artifacts(artifacts_toml::String, name::AbstractString, hash::SHA256)
     artifacts_dir = get_artifacts_dir()
 
     usage_file = usages_toml()
@@ -355,7 +355,7 @@ end
 
 Unbind the given `name` from the "Artifacts.toml" file. Silently fails if no such binding exists within the file.
 """
-function unbind_my_artifact!(artifacts_toml::String, name::String)
+function unbind_my_artifact!(artifacts_toml::String, name::AbstractString)
     artifact_lock = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock"))
     try
         artifact_dict = parse_toml(artifacts_toml)
