@@ -279,7 +279,12 @@ function track_my_artifacts(artifacts_toml::String, name::AbstractString, hash::
         end
 
         if haskey(usage_toml, artifact_path)
-            usage_toml[artifact_path][artifacts_toml][name] = now()
+            artifact_usage = usage_toml[artifact_path]
+            if haskey(artifact_usage, artifacts_toml)
+                artifact_usage[artifacts_toml][name] = now()
+            else
+                artifact_usage[artifacts_toml] = Dict(name => now())
+            end
         else
             usage_dict = Dict{String, Any}(
                 artifacts_toml => Dict{String, Any}(
