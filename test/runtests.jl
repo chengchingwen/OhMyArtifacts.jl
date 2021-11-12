@@ -67,5 +67,20 @@ global const pkgio = verbose ? stderr : (VERSION < v"1.6.0-DEV.254" ? mktemp()[2
         @test my_artifact_exists(hash_a)
         @test !my_artifact_exists(hash_b)
 
+        url = "https://raw.githubusercontent.com/chengchingwen/OhMyArtifacts.jl/master/README.md"
+        hash_c = download_my_artifact!(url, "readme", artifacts_toml)
+        @test my_artifact_hash("readme", artifacts_toml) == hash_c
+        @test my_artifact_exists(hash_c)
+        @test isfile(my_artifact_path(hash_c))
+
+        another_toml = my_artifacts_toml!(Base.UUID("cf8be1f4-309d-442e-839d-29d2a0af6cb7"))
+        @test isfile(another_toml)
+        bind_my_artifact!(artifacts_toml, "runtests.jl", hash_a)
+        bind_my_artifact!(another_toml, "runtests.jl", hash_a)
+        usage = OhMyArtifacts.parse_toml(usagefile)
+        @test length(usage) == 2
+        @test length(usage[my_artifact_path(hash_a)]) == 2
+        @test length(usage[my_artifact_path(hash_a)][artifacts_toml]) == 2
+        @test length(usage[my_artifact_path(hash_c)]) == 1
     end
 end
