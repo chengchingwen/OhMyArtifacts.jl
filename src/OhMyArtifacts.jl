@@ -143,9 +143,29 @@ macro my_artifact(op, name, ex...)
     end
 
     if op == :bind || op == :(:bind)
-        !isone(length(ex)) && error("wrong number of arguments for :bind, need \$name and \$hash.")
+        iszero(length(ex)) && error("wrong number of arguments for :bind, need \$name and \$hash.")
         hash = ex[1]
-        return :(bind_my_artifact!($(toml_path), $(esc(name)), $(esc(hash))))
+        kw_ex = Base.tail(ex)
+        isempty(kw_ex) && return :(bind_my_artifact!($(toml_path), $(esc(name)), $(esc(hash))))
+
+        !isone(length(kw_ex)) && error("wrong number of keyword arguments for :bind, only `force`")
+        kw = kw_ex[1]
+        bind_call = :(bind_my_artifact!($(toml_path), $(esc(name)), $(esc(hash)); ))
+        kwargs = bind_call.args[2].args
+        if kw == :force
+            push!(kwargs, esc(kw))
+        elseif kw isa Expr && kw.head == :(=)
+            if kw.args[1] == :force
+                kw.head = :kw
+                push!(kwargs, esc(kw))
+            else
+                error("unknown keyword argument for :bind : $(kw.args[1])")
+            end
+        else
+            error("weird keyword argument for :bind : $kw")
+        end
+
+        return bind_call
     elseif op == :hash || op == :(:hash)
         !iszero(length(ex)) && error("wrong number of arguments for :hash, need \$name.")
         return :(my_artifact_hash($(esc(name)), $(toml_path)))
