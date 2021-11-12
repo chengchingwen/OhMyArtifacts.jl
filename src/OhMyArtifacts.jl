@@ -37,7 +37,7 @@ end
 
 export my_artifacts_toml!, @my_artifacts_toml!, create_my_artifact, bind_my_artifact!,
     my_artifact_hash, my_artifact_path, my_artifact_exists,
-    @my_artifact
+    @my_artifact, download_my_artifact
 
 
 """
@@ -130,6 +130,8 @@ Usage:
 1. `@my_artifact :bind name hash` => `bind_my_artifact!(my_artifacts, name, hash)`
 2. `@my_artifact :hash name` => `my_artifact_hash(name, my_artifacts)`
 3. `@my_artifact :unbind name` => `unbind_my_artifact!(my_artifacts, name)`
+4. `@my_artifact :download name url downloadf kwarg...` =>
+    `download_my_artifact(downloadf, url, name, my_artifacts; kwarg...)`
 
 See also: [`bind_my_artifact!`](@ref), [`my_artifact_hash`](@ref),
  [`unbind_my_artifact!`](@ref), [`@my_artifacts_toml`](@ref)
@@ -150,6 +152,33 @@ macro my_artifact(op, name, ex...)
     elseif op == :unbind || op == :(:unbind)
         !iszero(length(ex)) && error("wrong number of arguments for :unbind, need \$name.")
         return :(unbind_my_artifact!($(toml_path), $(esc(name))))
+    elseif op == :download || op == :(:download)
+        iszero(length(ex)) && error("wrong number of arguments for :download, need at least \$name and \$url")
+        url = ex[1]
+        if isone(length(ex))
+            download_call = :(download_my_artifact($(esc(url)), $(esc(name)), $(toml_path)))
+        else
+            downloadf = ex[2]
+            if length(ex) == 2
+                download_call = :(download_my_artifact($(esc(downloadf)), $(esc(url)), $(esc(name)), $(toml_path)))
+            else
+                download_call = :(download_my_artifact($(esc(downloadf)), $(esc(url)), $(esc(name)), $(toml_path); ))
+                kwargs = download_call.args[2].args
+                kw_ex = ex[3:end]
+                for kw in kw_ex
+                    if kw isa Symbol || (kw isa Expr && kw.head == :...)
+                        push!(kwargs, esc(kw))
+                    elseif kw isa Expr && kw.head == :(=)
+                        kw.head = :kw
+                        push!(kwargs, esc(kw))
+                    else
+                        error("weird keyword argument for downloadf: $kw")
+                    end
+                end
+            end
+        end
+
+        return download_call
     else
         error("unknown artifact op: $op")
     end
@@ -351,7 +380,36 @@ function track_my_artifacts(artifacts_toml::String, name::AbstractString, hash::
 end
 
 """
-    unbind_my_artifact!(artifacts_toml::String, name::String)
+    download_my_artifact([downloadf::Function = Base.download], url, name::AbstractString, artifacts_toml::String;
+                         force_bind::Bool = false, downloadf_kwarg...)
+
+Convenient function that do download-create-bind together and return the content hash.
+ Download function `downloadf` should take two position arguments
+ (i.e. `downloadf(url, dest; downloadf_kwarg...)`). if `force_bind` is `true`,
+ it will overwrite the pre-existant binding.
+
+See also: [create_my_artifact](@ref), [bind_my_artifact!](@ref)
+"""
+function download_my_artifact(downloadf::Function, url, name::AbstractString, artifacts_toml::String;
+                              force_bind::Bool = false, downloadf_kwarg...)
+    lockname = bytes2hex(sha1(name))
+    hash = mkpidlock(joinpath(dirname(artifacts_toml), "$(lockname).lock")) do
+        create_my_artifact() do artifact_dir
+            downloadf(url, tempname(artifact_dir; cleanup=false); downloadf_kwarg...)
+        end
+    end
+    bind_my_artifact!(artifacts_toml, name, hash; force = force_bind)
+
+    return hash
+end
+download_my_artifact(
+    url, name::AbstractString, artifacts_toml::String;
+    force_bind::Bool = false, downloadf_kwarg...,
+) =
+    download_my_artifact(Base.download, url, name, artifacts_toml; force_bind, downloadf_kwarg...)
+
+"""
+    unbind_my_artifact!(artifacts_toml::String, name::AbstractString)
 
 Unbind the given `name` from the "Artifacts.toml" file. Silently fails if no such binding exists within the file.
 """
