@@ -26,7 +26,7 @@ Usage:
 2. `@my_artifact :hash name` => `my_artifact_hash(name, my_artifacts)`
 3. `@my_artifact :unbind name` => `unbind_my_artifact!(my_artifacts, name)`
 4. `@my_artifact :download name url downloadf kwarg...` =>
-    `download_my_artifact(downloadf, url, name, my_artifacts; kwarg...)`
+    `download_my_artifact!(downloadf, url, name, my_artifacts; kwarg...)`
 
 See also: [`bind_my_artifact!`](@ref), [`my_artifact_hash`](@ref),
  [`unbind_my_artifact!`](@ref), [`@my_artifacts_toml`](@ref)
@@ -71,13 +71,13 @@ macro my_artifact(op, name, ex...)
         iszero(length(ex)) && error("wrong number of arguments for :download, need at least \$name and \$url")
         url = ex[1]
         if isone(length(ex))
-            download_call = :(download_my_artifact($(esc(url)), $(esc(name)), $(toml_path)))
+            download_call = :(download_my_artifact!($(esc(url)), $(esc(name)), $(toml_path)))
         else
             downloadf = ex[2]
             if length(ex) == 2
-                download_call = :(download_my_artifact($(esc(downloadf)), $(esc(url)), $(esc(name)), $(toml_path)))
+                download_call = :(download_my_artifact!($(esc(downloadf)), $(esc(url)), $(esc(name)), $(toml_path)))
             else
-                download_call = :(download_my_artifact($(esc(downloadf)), $(esc(url)), $(esc(name)), $(toml_path); ))
+                download_call = :(download_my_artifact!($(esc(downloadf)), $(esc(url)), $(esc(name)), $(toml_path); ))
                 kwargs = download_call.args[2].args
                 kw_ex = ex[3:end]
                 for kw in kw_ex

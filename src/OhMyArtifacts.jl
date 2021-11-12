@@ -37,7 +37,7 @@ end
 
 export my_artifacts_toml!, @my_artifacts_toml!, create_my_artifact, bind_my_artifact!,
     my_artifact_hash, my_artifact_path, my_artifact_exists,
-    @my_artifact, download_my_artifact
+    @my_artifact, download_my_artifact!
 
 
 """
@@ -301,7 +301,7 @@ function track_my_artifacts(artifacts_toml::String, name::AbstractString, hash::
 end
 
 """
-    download_my_artifact([downloadf::Function = Base.download], url, name::AbstractString, artifacts_toml::String;
+    download_my_artifact!([downloadf::Function = Base.download], url, name::AbstractString, artifacts_toml::String;
                          force_bind::Bool = false, downloadf_kwarg...)
 
 Convenient function that do download-create-bind together and return the content hash.
@@ -311,7 +311,7 @@ Convenient function that do download-create-bind together and return the content
 
 See also: [create_my_artifact](@ref), [bind_my_artifact!](@ref)
 """
-function download_my_artifact(downloadf::Function, url, name::AbstractString, artifacts_toml::String;
+function download_my_artifact!(downloadf::Function, url, name::AbstractString, artifacts_toml::String;
                               force_bind::Bool = false, downloadf_kwarg...)
     lockname = bytes2hex(sha1(name))
     hash = mkpidlock(joinpath(dirname(artifacts_toml), "$(lockname).lock")) do
@@ -323,11 +323,11 @@ function download_my_artifact(downloadf::Function, url, name::AbstractString, ar
 
     return hash
 end
-download_my_artifact(
+download_my_artifact!(
     url, name::AbstractString, artifacts_toml::String;
     force_bind::Bool = false, downloadf_kwarg...,
 ) =
-    download_my_artifact(Base.download, url, name, artifacts_toml; force_bind, downloadf_kwarg...)
+    download_my_artifact!(Base.download, url, name, artifacts_toml; force_bind, downloadf_kwarg...)
 
 """
     unbind_my_artifact!(artifacts_toml::String, name::AbstractString)
