@@ -58,3 +58,14 @@ OhMyArtifacts-scratchspace/
 5. The Artifacts.toml in the scratchspace is the entry point of the OhMyArtifacts api. When caching
  a file, the api would create a mapping in the Artifacts.toml which map from a name to a sha256 hash.
  So when loading the file, the path is just the path of `artifacts` folder with the hash.
+
+
+## Internal (v0.2)
+
+Most of the behaviors are documented in the comment of source code.
+
+### Files
+
++ `Artifacts.toml`: Dict{BindingName => SHA256ContentHash}
++ `my_artifact_usage.toml`: Dict{CachePath => Dict{ArtifactTomlPath => Dict{BindingName => UsageTime}}}
++ `my_artifact_orphanages.toml`: Dict{OrphanCachePath => FoundTime}
