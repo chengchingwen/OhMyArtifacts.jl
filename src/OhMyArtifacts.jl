@@ -10,24 +10,27 @@ using TOML
 using Scratch
 using Pidfile
 
-const SCRATCH_DIR = Ref{String}()
 const ARTIFACTS_DIR = Ref{String}()
 
 const ARTIFACTS_TOML_VAR_SYM = Ref{Symbol}(:my_artifacts)
 
 function __init__()
-    global SCRATCH_DIR, ARTIFACTS_DIR
-    # create scratch space
+    global ARTIFACTS_DIR
+    # Create `OMA` scratch space and artifacts folder
     ARTIFACTS_DIR[] = @get_scratch!("artifacts")
-    SCRATCH_DIR[] = dirname(ARTIFACTS_DIR[])
 
+    # TODO: move log file to `artifacts` instead of putting in top level scratch dir
+
+    # Get orphanage file path
     orphan_file = orphanages_toml_path()
+    # Get the last modified time of the orphange file (create orphanage file if not exist)
     last_gc_time = if isfile(orphan_file)
         modified_time(orphan_file)
     else
         orphanages_toml()
         now()
     end
+    # Make a cleanup if we haven't do it for 7 days
     if now() - last_gc_time >= Day(7)
         find_orphanages()
     end
@@ -49,7 +52,12 @@ See also: [`@my_artifacts_toml!`](@ref)
 """
 function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
     uuid = Scratch.find_uuid(pkg)
+    # Create the `pkg` scratch space in `OMA` scratch space
+    #   with `pkg` uuid as the name, and delegate the ownership
+    #   of that space to `pkg`, so when `pkg` get removed, it
+    #   could also recycle this scratch space
     path = get_scratch!(@__MODULE__, string(uuid), pkg)
+    # create & return Artifacts.toml in `pkg` scratch space
     return touch(joinpath(path, "Artifacts.toml"))
 end
 
@@ -85,6 +93,26 @@ end
 
 function modified_time(file)
     return Dates.unix2datetime(mtime(file)) + round(now() - now(Dates.UTC), Hour)
+end
+
+usage_lock_name() = ".my_artifact_usage_lock"
+
+function create_usage_lock(usage_file)
+    return mkpidlock(joinpath(dirname(usage_file), usage_lock_name()))
+end
+
+function create_usage_lock(f::Function, usage_file)
+    return mkpidlock(f, joinpath(dirname(usage_file), usage_lock_name()))
+end
+
+artifact_lock_name() = "artifact_lock"
+
+function create_artifact_lock(artifacts_toml)
+    return mkpidlock(joinpath(dirname(artifacts_toml), artifact_lock_name()))
+end
+
+function create_artifact_lock(f::Function, artifacts_toml)
+    return mkpidlock(f, joinpath(dirname(artifacts_toml), artifact_lock_name()))
 end
 
 ## macros
@@ -140,7 +168,10 @@ Base.:(==)(a::SHA256, b::SHA256) = a.bytes == b.bytes
 ## artifacts ##
 
 function load_my_artifacts_toml(artifacts_toml::String)
-    artifact_dict = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock")) do
+    # Create a file lock with name `artifact_lock` and parse the toml.
+    # Avoid parallel read write with the lock, so if other process is
+    #   `bind`ing/`unbind`ing, it will wait until they finish to read the toml
+    artifact_dict = create_artifact_lock(artifacts_toml) do
         parse_toml(artifacts_toml)
     end
     return artifact_dict
@@ -176,7 +207,7 @@ end
 """
     my_artifact_exists(hash::SHA256)
 
-Returns whether or not the given artifact (identified by its SHA256 content hash) exists on-disk.
+Returns whether the given artifact (identified by its SHA256 content hash) exists on-disk.
 """
 function my_artifact_exists(hash::SHA256)
     return isfile(my_artifact_path(hash))
@@ -192,6 +223,7 @@ Creates a new artifact by doing `path = f(working_dir)`, hashing the returned `p
 """
 function create_my_artifact(f::Function)
     artifacts_dir = get_artifacts_dir()
+    # create a tempdir in `artifacts` dir
     temp_dir = mktempdir(artifacts_dir)
 
     try
@@ -208,11 +240,14 @@ function create_my_artifact(f::Function)
 
         # calculate the file hash
         artifact_hash = SHA256(Pkg.GitTools.blob_hash(SHA.SHA256_CTX, filepath))
-        new_path = joinpath(artifacts_dir, string(artifact_hash))
+        artifact_hash_str = string(artifact_hash)
+        new_path = joinpath(artifacts_dir, artifact_hash_str)
 
-        # skip if file already exist
-        filelock = mkpidlock(joinpath(dirname(new_path), "$(string(artifact_hash)).lock"))
+        # Create a file lock in `artifacts` dir with name `$hash.lock`.
+        # avoid other process creating the same cache at the same time.
+        filelock = mkpidlock(joinpath(artifacts_dir, "$(artifact_hash_str).lock"))
         try
+            # skip if file already exist (we already cache it)
             if !isfile(new_path)
                 mv(filepath, new_path)
                 fmode = filemode(new_path)
@@ -236,12 +271,19 @@ Writes a mapping of `name` -> `hash` within the given "Artifacts.toml" file. If 
  this will overwrite a pre-existant mapping, otherwise an error is raised.
 """
 function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false)
-    artifact_lock = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock"))
+    # Create a file lock with name `artifact_lock`. `load`/`unbind` would need to wait
+    #   until `bind`ing finish
+    artifact_lock = create_artifact_lock(artifacts_toml)
     try
         artifact_dict = parse_toml(artifacts_toml)
 
-        if !force && haskey(artifact_dict, name)
-            error("Mapping for $name within $(artifacts_toml) already exists!")
+        # If mapping already exist, make warning if `force`, otherwise error out.
+        if haskey(artifact_dict, name)
+            if force
+                @warn "Mapping for $name within $(artifacts_toml) is replaced forcely"
+            else
+                error("Mapping for $name within $(artifacts_toml) already exists!")
+            end
         end
 
         meta =  Dict{String,Any}(
@@ -263,29 +305,39 @@ function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::S
 end
 
 function track_my_artifacts(artifacts_toml::String, name::AbstractString, hash::SHA256)
-    artifacts_dir = get_artifacts_dir()
-
     usage_file = usages_toml()
-    mkpath(dirname(usage_file))
+    artifact_path = my_artifact_path(hash)
 
-    artifact_path = joinpath(artifacts_dir, string(hash))
-
-    usage_lock = mkpidlock(joinpath(dirname(usage_file), ".my_artifact_usage_lock"))
+    # Create a file lock with name ".my_artifact_usage_lock" at the same folder of usage_file
+    # block `find_orphanages`
+    usage_lock = create_usage_lock(usage_file)
     try
-        usage_toml = if isfile(usage_file)
-            parse_toml(usage_file)
-        else
-            Dict{String, Any}()
-        end
+        # update the usage dict of that cache.
+        #
+        #   usage log :: Dict{Cache_path => Dict{Artifact_toml_path => Dict{Binding_name => usage_time}}}
+        #
+        #   The usage log (toml) is a nested dictionary mapping from the cache (path) to the usage dict.
+        #
+        #   A usage dict (`artifact_usage`) is a nested dictionary mapping from the artifact toml (path)
+        #     to the binding dict.
+        #
+        #   A binding dict (inner-most part) is a dictionary mapping from the binding name to the time
+        #     that the binding was created.
+        usage_toml = parse_toml(usage_file)
 
         if haskey(usage_toml, artifact_path)
+            # the cache has been used before, get usage dict
             artifact_usage = usage_toml[artifact_path]
             if haskey(artifact_usage, artifacts_toml)
+                # the artifact toml already has a binding to the same cache
+                # add a new binding name created time
                 artifact_usage[artifacts_toml][name] = now()
             else
+                # no binding exist for this cache, create new binding dict
                 artifact_usage[artifacts_toml] = Dict(name => now())
             end
         else
+            # the cache hasn't been used before, create new usage dict
             usage_dict = Dict{String, Any}(
                 artifacts_toml => Dict{String, Any}(
                     name => now()
@@ -294,6 +346,7 @@ function track_my_artifacts(artifacts_toml::String, name::AbstractString, hash::
             usage_toml[artifact_path] = usage_dict
         end
 
+        # write the result to file
         let usage_toml = usage_toml
             open(usage_file, "w") do io
                 TOML.print(io, usage_toml, sorted=true)
@@ -317,8 +370,12 @@ Convenient function that do download-create-bind together and return the content
 See also: [create_my_artifact](@ref), [bind_my_artifact!](@ref)
 """
 function download_my_artifact!(downloadf::Function, url, name::AbstractString, artifacts_toml::String;
-                              force_bind::Bool = false, downloadf_kwarg...)
-    lockname = bytes2hex(sha1(name))
+                               force_bind::Bool = false, downloadf_kwarg...)
+    # Create file lock with url sha1 hash as the lock name
+    #   Avoid multiple downloading at the same time. It will still download the file
+    #   multiple times, but not at the same time. This is unavoidable because we use
+    #   content hash and we cannot know the the content hash without actual downloading.
+    lockname = bytes2hex(sha1(string(url)))
     hash = mkpidlock(joinpath(dirname(artifacts_toml), "$(lockname).lock")) do
         create_my_artifact() do artifact_dir
             downloadf(url, tempname(artifact_dir; cleanup=false); downloadf_kwarg...)
@@ -340,16 +397,23 @@ download_my_artifact!(
 Unbind the given `name` from the "Artifacts.toml" file. Silently fails if no such binding exists within the file.
 """
 function unbind_my_artifact!(artifacts_toml::String, name::AbstractString)
-    artifact_lock = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock"))
+    # Create a file lock with name `artifact_lock`. `load`/`bind` would need to wait
+    #   until `unbind`ing finish
+    artifact_lock = create_artifact_lock(artifacts_toml)
     try
         artifact_dict = parse_toml(artifacts_toml)
 
+        # If the binding doesn't exist, skip
         !haskey(artifact_dict, name) && return
 
         hash = artifact_dict[name]["sha256"]
-
+        # Remove the binding from artifacts toml
         delete!(artifact_dict, name)
 
+        # Write the result to file
+        #   Notice that we didn't update the usage dict at this moment.
+        #     It's done in `find_orphanages` so that we don't frequently update
+        #     the usage toml.
         let artifact_dict = artifact_dict
             open(artifacts_toml, "w") do io
                 TOML.print(io, artifact_dict, sorted=true)
@@ -363,31 +427,43 @@ end
 
 function find_orphanages(; collect_delay::Period=Day(7))
     artifacts_dir = get_artifacts_dir()
-
     usage_file = usages_toml()
     orphanage_file = orphanages_toml()
 
-    !isfile(usage_file) && return
-
-    usage_lock = mkpidlock(joinpath(dirname(usage_file), ".my_artifact_usage_lock"))
+    # Create a file lock with name ".my_artifact_usage_lock" at the same folder of usage_file
+    # block `track_my_artifacts`
+    #   This is the only function that read/write to orphanages log, so no need to lock it.
+    #     Parallel call to this function will be block by usage lock.
+    usage_lock = create_usage_lock(usage_file)
     try
-        usage_toml = if isfile(usage_file)
-            parse_toml(usage_file)
-        else
-            Dict{String, Any}()
-        end
+        usage_toml = parse_toml(usage_file)
 
         # find orphan artifacts
+        # orphanage :: Vector{Cache_path => Last_modified_time}
         orphanage = Pair{String, DateTime}[]
 
-        # artifact without binding
-        for artifact_path in readdir(get_artifacts_dir(), join=true)
+        # Find artifact without binding
+        #   Check from all exist cache. If all bindings for that cache are safely removed by `unbind`
+        #     (and usage toml has been updated in the previous `find_orphanages`, the usage dict will
+        #     be empty and thus no record in usage log.
+        #
+        #   For all cache in the `artifacts` dir, check if there exist a record in the usage log.
+        #     If not, add to `orphanage`. They can be removed safely.
+        for artifact_path in readdir(artifacts_dir, join=true)
             if !haskey(usage_toml, artifact_path)
                 push!(orphanage, artifact_path=>modified_time(artifact_path))
             end
         end
 
-        # artifact with binding
+        # Check artifact with binding
+        #   Check from usage log.
+        #
+        #   If a Artifact toml is removed due to scratch space recycling,
+        #     the usage log would still has an entry for it, but the linked artifact toml file
+        #     does not exist.
+        #
+        #   If a binding is removed with `unbind`, since we didn't update the usage toml at that moment,
+        #     the usage update is done here.
         curr_gc_time = now()
         for (artifact_path, usage_dict) in usage_toml
             # check if all bindings are removed
@@ -397,23 +473,36 @@ function find_orphanages(; collect_delay::Period=Day(7))
                     # the toml is already removed, so no such usage exist
                     delete!(usage_dict, artifacts_toml)
                 else
+                    # This block is for updating the usage toml after unbinding.
+                    #   We didn't directly update usage toml each time the `unbind`
+                    #     is called, instead we check if the binding is `unbind`ed
+                    #     here so that the update can be done all at once.
+
                     # else we read the toml
                     artifact_dict = load_my_artifacts_toml(artifacts_toml)
 
                     # check that all usage entry is still exist, or remove them
                     for entry in keys(entrys)
                         if !haskey(artifact_dict, entry)
+                            # binding not found, removed
                             delete!(entrys, entry)
+                        else
+                            # binding exist, make sure it did not get force update
+                            hash = SHA256(artifact_dict[entry]["sha256"])
+                            if my_artifact_path(hash) != artifact_path
+                                # binding is forcely updated
+                                delete!(entrys, entry)
+                            end
                         end
                     end
 
-                    # if no entrys, remove this usage
+                    # if no binding exists, remove this usage
                     isempty(entrys) && delete!(usage_dict, artifacts_toml)
                 end
             end
 
             if isempty(usage_dict)
-                # no usage of this artifact exist
+                # no usage of this cache exist
                 # mark it as orphan and record the current time
                 push!(orphanage, artifact_path=>curr_gc_time)
                 delete!(usage_toml, artifact_path)
@@ -428,20 +517,16 @@ function find_orphanages(; collect_delay::Period=Day(7))
         end
 
         # update the orphanage file
-        old_orphans = if isfile(orphanage_file)
-            parse_toml(orphanage_file)
-        else
-            Dict{String, DateTime}()
-        end
+        old_orphans = parse_toml(orphanage_file)
         # merge old and new orphan list
         # *notice*: if the entry already on the list, keep the old recorded time
         new_orphans = merge(Dict(orphanage), old_orphans)
 
         # mark orphanage for deletion
+        #   If the cache become an orphan for more than `collect_delay` time, it should be deleted.
         gc_time = now()
         deletion_list = String[]
-        for artifact_path in keys(new_orphans)
-            last_gc_time = new_orphans[artifact_path]
+        for (artifact_path, last_gc_time) in new_orphans
             if gc_time - last_gc_time >= collect_delay
                 push!(deletion_list, artifact_path)
                 delete!(new_orphans, artifact_path)
@@ -456,6 +541,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
         end
 
         # delete my artifacts
+        # BEGIN: utility functions for deletion
         pretty_byte_str = (size) -> begin
             bytes, mb = Base.prettyprint_getunits(size, length(Base._mem_units), Int64(1024))
             return @sprintf("%.3f %s", bytes, Base._mem_units[mb])
@@ -481,6 +567,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
             end
             return path_size
         end
+        # END: utility functions for deletion
 
         space_freed = 0
         for artifact_path in deletion_list
