@@ -258,7 +258,6 @@ function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::S
         artifact_dict = parse_toml(artifacts_toml)
 
         # If mapping already exist, make warning if `force`, otherwise error out.
-        # TODO: check usage log get update correctly.
         if haskey(artifact_dict, name)
             if force
                 @warn "Mapping for $name within $(artifacts_toml) is replaced forcely"
@@ -462,7 +461,15 @@ function find_orphanages(; collect_delay::Period=Day(7))
                     # check that all usage entry is still exist, or remove them
                     for entry in keys(entrys)
                         if !haskey(artifact_dict, entry)
+                            # binding not found, removed
                             delete!(entrys, entry)
+                        else
+                            # binding exist, make sure it did not get force update
+                            hash = SHA256(artifact_dict[entry]["sha256"])
+                            if my_artifact_path(hash) != artifact_path
+                                # binding is forcely updated
+                                delete!(entrys, entry)
+                            end
                         end
                     end
 
