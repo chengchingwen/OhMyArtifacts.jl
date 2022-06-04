@@ -95,6 +95,26 @@ function modified_time(file)
     return Dates.unix2datetime(mtime(file)) + round(now() - now(Dates.UTC), Hour)
 end
 
+usage_lock_name() = ".my_artifact_usage_lock"
+
+function create_usage_lock(usage_file)
+    return mkpidlock(joinpath(dirname(usage_file), usage_lock_name()))
+end
+
+function create_usage_lock(f::Function, usage_file)
+    return mkpidlock(f, joinpath(dirname(usage_file), usage_lock_name()))
+end
+
+artifact_lock_name() = "artifact_lock"
+
+function create_artifact_lock(artifacts_toml)
+    return mkpidlock(joinpath(dirname(artifacts_toml), artifact_lock_name()))
+end
+
+function create_artifact_lock(f::Function, artifacts_toml)
+    return mkpidlock(f, joinpath(dirname(artifacts_toml), artifact_lock_name()))
+end
+
 ## macros
 
 """
@@ -151,7 +171,7 @@ function load_my_artifacts_toml(artifacts_toml::String)
     # Create a file lock with name `artifact_lock` and parse the toml.
     # Avoid parallel read write with the lock, so if other process is
     #   `bind`ing/`unbind`ing, it will wait until they finish to read the toml
-    artifact_dict = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock")) do
+    artifact_dict = create_artifact_lock(artifacts_toml) do
         parse_toml(artifacts_toml)
     end
     return artifact_dict
@@ -225,7 +245,7 @@ function create_my_artifact(f::Function)
 
         # Create a file lock in `artifacts` dir with name `$hash.lock`.
         # avoid other process creating the same cache at the same time.
-        filelock = mkpidlock(joinpath(dirname(new_path), "$(artifact_hash_str).lock"))
+        filelock = mkpidlock(joinpath(artifacts_dir, "$(artifact_hash_str).lock"))
         try
             # skip if file already exist (we already cache it)
             if !isfile(new_path)
@@ -253,7 +273,7 @@ Writes a mapping of `name` -> `hash` within the given "Artifacts.toml" file. If 
 function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false)
     # Create a file lock with name `artifact_lock`. `load`/`unbind` would need to wait
     #   until `bind`ing finish
-    artifact_lock = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock"))
+    artifact_lock = create_artifact_lock(artifacts_toml)
     try
         artifact_dict = parse_toml(artifacts_toml)
 
@@ -290,7 +310,7 @@ function track_my_artifacts(artifacts_toml::String, name::AbstractString, hash::
 
     # Create a file lock with name ".my_artifact_usage_lock" at the same folder of usage_file
     # block `find_orphanages`
-    usage_lock = mkpidlock(joinpath(dirname(usage_file), ".my_artifact_usage_lock"))
+    usage_lock = create_usage_lock(usage_file)
     try
         # update the usage dict of that cache.
         #
@@ -350,8 +370,12 @@ Convenient function that do download-create-bind together and return the content
 See also: [create_my_artifact](@ref), [bind_my_artifact!](@ref)
 """
 function download_my_artifact!(downloadf::Function, url, name::AbstractString, artifacts_toml::String;
-                              force_bind::Bool = false, downloadf_kwarg...)
-    lockname = bytes2hex(sha1(name))
+                               force_bind::Bool = false, downloadf_kwarg...)
+    # Create file lock with url sha1 hash as the lock name
+    #   Avoid multiple downloading at the same time. It will still download the file
+    #   multiple times, but not at the same time. This is unavoidable because we use
+    #   content hash and we cannot know the the content hash without actual downloading.
+    lockname = bytes2hex(sha1(string(url)))
     hash = mkpidlock(joinpath(dirname(artifacts_toml), "$(lockname).lock")) do
         create_my_artifact() do artifact_dir
             downloadf(url, tempname(artifact_dir; cleanup=false); downloadf_kwarg...)
@@ -375,7 +399,7 @@ Unbind the given `name` from the "Artifacts.toml" file. Silently fails if no suc
 function unbind_my_artifact!(artifacts_toml::String, name::AbstractString)
     # Create a file lock with name `artifact_lock`. `load`/`bind` would need to wait
     #   until `unbind`ing finish
-    artifact_lock = mkpidlock(joinpath(dirname(artifacts_toml), "artifact_lock"))
+    artifact_lock = create_artifact_lock(artifacts_toml)
     try
         artifact_dict = parse_toml(artifacts_toml)
 
@@ -403,7 +427,6 @@ end
 
 function find_orphanages(; collect_delay::Period=Day(7))
     artifacts_dir = get_artifacts_dir()
-
     usage_file = usages_toml()
     orphanage_file = orphanages_toml()
 
@@ -411,7 +434,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
     # block `track_my_artifacts`
     #   This is the only function that read/write to orphanages log, so no need to lock it.
     #     Parallel call to this function will be block by usage lock.
-    usage_lock = mkpidlock(joinpath(dirname(usage_file), ".my_artifact_usage_lock"))
+    usage_lock = create_usage_lock(usage_file)
     try
         usage_toml = parse_toml(usage_file)
 
@@ -426,7 +449,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
         #
         #   For all cache in the `artifacts` dir, check if there exist a record in the usage log.
         #     If not, add to `orphanage`. They can be removed safely.
-        for artifact_path in readdir(get_artifacts_dir(), join=true)
+        for artifact_path in readdir(artifacts_dir, join=true)
             if !haskey(usage_toml, artifact_path)
                 push!(orphanage, artifact_path=>modified_time(artifact_path))
             end
