@@ -14,11 +14,13 @@ Generally you don't have to manually call this function. It would be called ever
  we need to recycle some storages.
 """
 function init()
-    global ARTIFACTS_DIR, _OLD_ARTIFACTS_DIR
+    global ARTIFACTS_DIR, LOG_DIR, _OLD_ARTIFACTS_DIR
     # Create `OMA` scratch space and artifacts folder
     artifacts_dir = @get_scratch!("ohmyartifacts")
+    log_dir = @get_scratch!("logs")
     scratch_dir = dirname(artifacts_dir)
     ARTIFACTS_DIR[] = artifacts_dir
+    LOG_DIR[] = log_dir
     _OLD_ARTIFACTS_DIR[] = joinpath(scratch_dir, "artifacts")
 
     # convert old cache structure to new one
@@ -40,4 +42,3 @@ function init()
 
     return
 end
-

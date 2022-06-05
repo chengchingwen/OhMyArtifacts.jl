@@ -33,11 +33,12 @@ We mentioned a few features and issues that we want to solve, but how does it wo
 OhMyArtifacts-scratchspace/
   |- artifacts/ (for v0.2 compatible)
 	|- <some sha256 string> -> ohmyartifacts/<1-byte-prefix>/<some sha256 string>
-  |- my_artifact_usage.toml -> ohmyartifacts/my_artifact_usage.toml
-  |- my_artifact_orphanages.toml -> ohmyartifacts/my_artifact_orphanages.toml
-  |- ohmyartifacts/
+  |- my_artifact_usage.toml -> logs/my_artifact_usage.toml
+  |- my_artifact_orphanages.toml -> logs/my_artifact_orphanages.toml
+  |- logs/
     |- my_artifact_usage.toml
     |- my_artifact_orphanages.toml
+  |- ohmyartifacts/
 	|_ <1-byte-prefix>/
 	  |- <some sha256 string>
 	...

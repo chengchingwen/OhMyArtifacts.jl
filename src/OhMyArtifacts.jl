@@ -11,6 +11,7 @@ using Scratch
 using Pidfile
 
 const ARTIFACTS_DIR = Ref{String}()
+const LOG_DIR = Ref{String}()
 const _OLD_ARTIFACTS_DIR = Ref{String}()
 
 const ARTIFACTS_TOML_VAR_SYM = Ref{Symbol}(:my_artifacts)
@@ -62,19 +63,25 @@ function get_artifacts_dir()
     return ARTIFACTS_DIR[]
 end
 
+function get_log_dir()
+    global LOG_DIR
+    maybe_init()
+    return LOG_DIR[]
+end
+
 function get_artifacts_toml_sym()
     global ARTIFACTS_TOML_VAR_SYM
     return ARTIFACTS_TOML_VAR_SYM[]
 end
 
-orphanages_toml_path() = joinpath(get_artifacts_dir(), "my_artifact_orphanages.toml")
+orphanages_toml_path() = joinpath(get_log_dir(), "my_artifact_orphanages.toml")
 function orphanages_toml()
     path = orphanages_toml_path()
     mkpath(dirname(path))
     touch(path)
 end
 
-usages_toml_path() = joinpath(get_artifacts_dir(), "my_artifact_usage.toml")
+usages_toml_path() = joinpath(get_log_dir(), "my_artifact_usage.toml")
 function usages_toml()
     path = usages_toml_path()
     mkpath(dirname(path))
