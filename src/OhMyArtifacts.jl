@@ -5,6 +5,7 @@ using Pkg.Artifacts
 using Pkg.Types: parse_toml
 using SHA
 using Dates
+using Downloads
 using Printf
 using TOML
 using Scratch
@@ -359,7 +360,7 @@ function track_my_artifacts(artifacts_toml::String, name::AbstractString, hash::
 end
 
 """
-    download_my_artifact!([downloadf::Function = Base.download], url, name::AbstractString, artifacts_toml::String;
+    download_my_artifact!([downloadf::Function = Downloads.download], url, name::AbstractString, artifacts_toml::String;
                          force_bind::Bool = false, downloadf_kwarg...)
 
 Convenient function that do download-create-bind together and return the content hash.
@@ -389,7 +390,7 @@ download_my_artifact!(
     url, name::AbstractString, artifacts_toml::String;
     force_bind::Bool = false, downloadf_kwarg...,
 ) =
-    download_my_artifact!(Base.download, url, name, artifacts_toml; force_bind, downloadf_kwarg...)
+    download_my_artifact!(Downloads.download, url, name, artifacts_toml; force_bind, downloadf_kwarg...)
 
 """
     unbind_my_artifact!(artifacts_toml::String, name::AbstractString)
