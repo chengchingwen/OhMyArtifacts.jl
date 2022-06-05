@@ -61,6 +61,12 @@ global const pkgio = verbose ? stderr : (VERSION < v"1.6.0-DEV.254" ? mktemp()[2
         @test my_artifact_exists(hash_a)
         @test my_artifact_exists(hash_b)
 
+        bind_my_artifact!(artifacts_toml, "utils.jl", hash_b)
+        OhMyArtifacts.find_orphanages()
+        orphan = OhMyArtifacts.parse_toml(orphanfile)
+        @test isempty(orphan)
+
+        OhMyArtifacts.unbind_my_artifact!(artifacts_toml, "utils.jl")
         OhMyArtifacts.find_orphanages(; collect_delay=Hour(0))
         orphan = OhMyArtifacts.parse_toml(orphanfile)
         @test isempty(orphan)

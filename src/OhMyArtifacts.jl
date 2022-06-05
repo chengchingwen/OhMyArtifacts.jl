@@ -516,11 +516,15 @@ function find_orphanages(; collect_delay::Period=Day(7))
             end
         end
 
-        # update the orphanage file
-        old_orphans = parse_toml(orphanage_file)
         # merge old and new orphan list
-        # *notice*: if the entry already on the list, keep the old recorded time
-        new_orphans = merge(Dict(orphanage), old_orphans)
+        #   if the entry already on the list, keep the old recorded time
+        new_orphans = Dict(orphanage)
+        old_orphans = parse_toml(orphanage_file)
+        for artifact_path in keys(new_orphans)
+            if haskey(old_orphans, artifact_path)
+                new_orphans[artifact_path] = old_orphans[artifact_path]
+            end
+        end
 
         # mark orphanage for deletion
         #   If the cache become an orphan for more than `collect_delay` time, it should be deleted.
