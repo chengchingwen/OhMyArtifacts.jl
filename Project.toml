@@ -1,7 +1,7 @@
 name = "OhMyArtifacts"
 uuid = "cf8be1f4-309d-442e-839d-29d2a0af6cb7"
 authors = ["chengchingwen <adgjl5645@hotmail.com> and contributors"]
-version = "0.2.0"
+version = "0.2.1"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
