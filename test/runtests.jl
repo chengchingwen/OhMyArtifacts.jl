@@ -22,8 +22,8 @@ global const pkgio = verbose ? stderr : (VERSION < v"1.6.0-DEV.254" ? mktemp()[2
         hash_b = create_my_artifact() do artifact_dir
             cp(joinpath(@__DIR__, "utils.jl"), joinpath(artifact_dir, "a"))
         end
-        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), string(hash_a)))
-        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), string(hash_b)))
+        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex(hash_a.bytes[1]), string(hash_a)))
+        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex(hash_b.bytes[1]), string(hash_b)))
         @test isfile(my_artifact_path(hash_a))
         @test isfile(my_artifact_path(hash_b))
         @test my_artifact_exists(hash_a)

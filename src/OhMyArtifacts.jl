@@ -2,7 +2,7 @@ module OhMyArtifacts
 
 using Pkg
 using Pkg.Artifacts
-using Pkg.Types: parse_toml, write_env_usage
+using Pkg.Types: parse_toml
 using SHA
 using Dates
 using Printf
@@ -11,32 +11,12 @@ using Scratch
 using Pidfile
 
 const ARTIFACTS_DIR = Ref{String}()
+const _OLD_ARTIFACTS_DIR = Ref{String}()
 
 const ARTIFACTS_TOML_VAR_SYM = Ref{Symbol}(:my_artifacts)
 
-function __init__()
-    global ARTIFACTS_DIR
-    # Create `OMA` scratch space and artifacts folder
-    ARTIFACTS_DIR[] = @get_scratch!("artifacts")
-
-    # TODO: move log file to `artifacts` instead of putting in top level scratch dir
-
-    # Get orphanage file path
-    orphan_file = orphanages_toml_path()
-    # Get the last modified time of the orphange file (create orphanage file if not exist)
-    last_gc_time = if isfile(orphan_file)
-        modified_time(orphan_file)
-    else
-        orphanages_toml()
-        now()
-    end
-    # Make a cleanup if we haven't do it for 7 days
-    if now() - last_gc_time >= Day(7)
-        find_orphanages()
-    end
-
-    return
-end
+include("./migrate.jl")
+include("./init.jl")
 
 export my_artifacts_toml!, @my_artifacts_toml!, create_my_artifact, bind_my_artifact!,
     my_artifact_hash, my_artifact_path, my_artifact_exists,
@@ -51,6 +31,7 @@ Return the path to (or creates) "Artifacts.toml" for the given `pkg`.
 See also: [`@my_artifacts_toml!`](@ref)
 """
 function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
+    init()
     uuid = Scratch.find_uuid(pkg)
     # Create the `pkg` scratch space in `OMA` scratch space
     #   with `pkg` uuid as the name, and delegate the ownership
@@ -64,12 +45,21 @@ end
 
 ## utilities
 
+_merge(d::AbstractDict...) = mergewith(_merge, d...)
+_merge(d::DateTime...) = min(d...)
+merge_toml(d...) = mergewith(_merge, d...)
+merge_toml!(d...) = mergewith!(_merge, d...)
+
+readdirfiles(dir) = mapreduce(x->map(Base.Fix1(joinpath, x[1]), x[end]), append!, walkdir(dir); init=String[])
+
 function get_scratch_dir()
     return mkpath(scratch_dir(string(Base.PkgId(@__MODULE__).uuid)))
 end
 
 function get_artifacts_dir()
-    return mkpath(joinpath(get_scratch_dir(), "artifacts"))
+    global ARTIFACTS_DIR
+    maybe_init()
+    return ARTIFACTS_DIR[]
 end
 
 function get_artifacts_toml_sym()
@@ -77,16 +67,16 @@ function get_artifacts_toml_sym()
     return ARTIFACTS_TOML_VAR_SYM[]
 end
 
-orphanages_toml_path() = joinpath(get_scratch_dir(), "my_artifact_orphanages.toml")
-
+orphanages_toml_path() = joinpath(get_artifacts_dir(), "my_artifact_orphanages.toml")
 function orphanages_toml()
     path = orphanages_toml_path()
     mkpath(dirname(path))
     touch(path)
 end
 
+usages_toml_path() = joinpath(get_artifacts_dir(), "my_artifact_usage.toml")
 function usages_toml()
-    path = joinpath(get_scratch_dir(), "my_artifact_usage.toml")
+    path = usages_toml_path()
     mkpath(dirname(path))
     touch(path)
 end
@@ -201,7 +191,10 @@ See also: [`my_artifact_exists`](@ref)
 """
 function my_artifact_path(hash::SHA256)
     artifacts_dir = get_artifacts_dir()
-    return joinpath(artifacts_dir, string(hash))
+    prefix = bytes2hex(hash.bytes[1])
+    path = joinpath(artifacts_dir, prefix, string(hash))
+    mkpath(dirname(path))
+    return path
 end
 
 """
@@ -223,7 +216,7 @@ Creates a new artifact by doing `path = f(working_dir)`, hashing the returned `p
 """
 function create_my_artifact(f::Function)
     artifacts_dir = get_artifacts_dir()
-    # create a tempdir in `artifacts` dir
+    # create a tempdir in `ohmyartifacts` dir
     temp_dir = mktempdir(artifacts_dir)
 
     try
@@ -241,9 +234,9 @@ function create_my_artifact(f::Function)
         # calculate the file hash
         artifact_hash = SHA256(Pkg.GitTools.blob_hash(SHA.SHA256_CTX, filepath))
         artifact_hash_str = string(artifact_hash)
-        new_path = joinpath(artifacts_dir, artifact_hash_str)
+        new_path = my_artifact_path(artifact_hash)
 
-        # Create a file lock in `artifacts` dir with name `$hash.lock`.
+        # Create a file lock in `ohmyartifacts` dir with name `$hash.lock`.
         # avoid other process creating the same cache at the same time.
         filelock = mkpidlock(joinpath(artifacts_dir, "$(artifact_hash_str).lock"))
         try
@@ -437,6 +430,8 @@ function find_orphanages(; collect_delay::Period=Day(7))
     usage_lock = create_usage_lock(usage_file)
     try
         usage_toml = parse_toml(usage_file)
+        # handle mixture of old and new cache structure
+        usage_toml = merge_usage_toml(usage_toml)
 
         # find orphan artifacts
         # orphanage :: Vector{Cache_path => Last_modified_time}
@@ -447,9 +442,13 @@ function find_orphanages(; collect_delay::Period=Day(7))
         #     (and usage toml has been updated in the previous `find_orphanages`, the usage dict will
         #     be empty and thus no record in usage log.
         #
-        #   For all cache in the `artifacts` dir, check if there exist a record in the usage log.
+        #   For all cache in the `ohmyartifacts` dir, check if there exist a record in the usage log.
         #     If not, add to `orphanage`. They can be removed safely.
-        for artifact_path in readdir(artifacts_dir, join=true)
+        for artifact_path in readdirfiles(artifacts_dir)
+            hash = tryparse(SHA256, basename(artifact_path))
+            # not a cache
+            isnothing(hash) && continue
+
             if !haskey(usage_toml, artifact_path)
                 push!(orphanage, artifact_path=>modified_time(artifact_path))
             end
@@ -488,8 +487,8 @@ function find_orphanages(; collect_delay::Period=Day(7))
                             delete!(entrys, entry)
                         else
                             # binding exist, make sure it did not get force update
-                            hash = SHA256(artifact_dict[entry]["sha256"])
-                            if my_artifact_path(hash) != artifact_path
+                            hash = artifact_dict[entry]["sha256"]
+                            if hash != basename(artifact_path)
                                 # binding is forcely updated
                                 delete!(entrys, entry)
                             end
