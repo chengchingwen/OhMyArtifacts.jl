@@ -10,10 +10,10 @@ global const pkgio = verbose ? stderr : (VERSION < v"1.6.0-DEV.254" ? mktemp()[2
 @testset "OhMyArtifacts.jl Basics" begin
     temp_pkg_dir() do project_dir
         artifacts_toml = @my_artifacts_toml!()
-        @test isdir(OhMyArtifacts.get_scratch_dir())
+        @test isdir(OhMyArtifacts.get_scratchspace())
         @test isdir(OhMyArtifacts.get_artifacts_dir())
         @test isfile(artifacts_toml)
-        @test startswith(artifacts_toml, OhMyArtifacts.get_scratch_dir())
+        @test startswith(artifacts_toml, OhMyArtifacts.get_scratchspace())
         @test isempty(OhMyArtifacts.load_my_artifacts_toml(artifacts_toml))
 
         hash_a = create_my_artifact() do artifact_dir

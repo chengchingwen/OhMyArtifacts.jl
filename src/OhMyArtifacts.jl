@@ -11,18 +11,14 @@ using TOML
 using Scratch
 using Pidfile
 
-const ARTIFACTS_DIR = Ref{String}()
-const LOG_DIR = Ref{String}()
-const _OLD_ARTIFACTS_DIR = Ref{String}()
-
-const ARTIFACTS_TOML_VAR_SYM = Ref{Symbol}(:my_artifacts)
-
-include("./migrate.jl")
-include("./init.jl")
-
 export my_artifacts_toml!, @my_artifacts_toml!, create_my_artifact, bind_my_artifact!,
     my_artifact_hash, my_artifact_path, my_artifact_exists,
     @my_artifact, download_my_artifact!
+
+
+const ARTIFACTS_TOML_VAR_SYM = Ref{Symbol}(:my_artifacts)
+
+include("./init.jl")
 
 
 """
@@ -33,17 +29,21 @@ Return the path to (or creates) "Artifacts.toml" for the given `pkg`.
 See also: [`@my_artifacts_toml!`](@ref)
 """
 function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
+    # initialize OhMyArtifacts
     init()
-    uuid = Scratch.find_uuid(pkg)
+
     # Create the `pkg` scratch space in `OMA` scratch space
     #   with `pkg` uuid as the name, and delegate the ownership
     #   of that space to `pkg`, so when `pkg` get removed, it
     #   could also recycle this scratch space
-    path = get_scratch!(@__MODULE__, string(uuid), pkg)
+    scratchspace = get_scratchspace()
+    uuid = Scratch.find_uuid(pkg)
+    path = joinpath(scratchspace, string(uuid)) |> mkpath
+    Scratch.track_scratch_access(uuid, path)
+
     # create & return Artifacts.toml in `pkg` scratch space
     return touch(joinpath(path, "Artifacts.toml"))
 end
-
 
 ## utilities
 
@@ -52,66 +52,46 @@ _merge(d::DateTime...) = min(d...)
 merge_toml(d...) = mergewith(_merge, d...)
 merge_toml!(d...) = mergewith!(_merge, d...)
 
+function write_toml(file, toml)
+    open(file, "w") do io
+        TOML.print(io, toml, sorted=true)
+    end
+end
+
 readdirfiles(dir) = mapreduce(x->map(Base.Fix1(joinpath, x[1]), x[end]), append!, walkdir(dir); init=String[])
 
-function get_scratch_dir()
-    return mkpath(scratch_dir(string(Base.PkgId(@__MODULE__).uuid)))
+# function get_scratch_dir()
+#     return mkpath(scratch_dir(string(Base.PkgId(@__MODULE__).uuid)))
+# end
+
+function get_scratchspace()
+    global _SCRATCHSPACE
+    maybe_init()
+    return _SCRATCHSPACE[]
 end
 
-function get_artifacts_dir()
-    global ARTIFACTS_DIR
-    maybe_init()
-    return ARTIFACTS_DIR[]
-end
-
-function get_log_dir()
-    global LOG_DIR
-    maybe_init()
-    return LOG_DIR[]
-end
+get_artifacts_dir() = joinpath(get_scratchspace(), "artifacts")
+get_log_dir() = joinpath(get_scratchspace(), "logs")
+orphanages_toml() = joinpath(get_log_dir(), "my_artifact_orphanages.toml")
+usages_toml() = joinpath(get_log_dir(), "my_artifact_usage.toml")
 
 function get_artifacts_toml_sym()
     global ARTIFACTS_TOML_VAR_SYM
     return ARTIFACTS_TOML_VAR_SYM[]
 end
 
-orphanages_toml_path() = joinpath(get_log_dir(), "my_artifact_orphanages.toml")
-function orphanages_toml()
-    path = orphanages_toml_path()
-    mkpath(dirname(path))
-    touch(path)
-end
-
-usages_toml_path() = joinpath(get_log_dir(), "my_artifact_usage.toml")
-function usages_toml()
-    path = usages_toml_path()
-    mkpath(dirname(path))
-    touch(path)
-end
-
 function modified_time(file)
     return Dates.unix2datetime(mtime(file)) + round(now() - now(Dates.UTC), Hour)
 end
 
-usage_lock_name() = ".my_artifact_usage_lock"
+create_file_lock(file, lock_name) = mkpidlock(joinpath(dirname(file), lock_name))
+create_file_lock(f::Function, file, lock_name) = mkpidlock(f, joinpath(dirname(file), lock_name))
 
-function create_usage_lock(usage_file)
-    return mkpidlock(joinpath(dirname(usage_file), usage_lock_name()))
-end
+const usage_lock_name = ".my_artifact_usage_lock"
+const artifact_lock_name = "artifact_lock"
 
-function create_usage_lock(f::Function, usage_file)
-    return mkpidlock(f, joinpath(dirname(usage_file), usage_lock_name()))
-end
-
-artifact_lock_name() = "artifact_lock"
-
-function create_artifact_lock(artifacts_toml)
-    return mkpidlock(joinpath(dirname(artifacts_toml), artifact_lock_name()))
-end
-
-function create_artifact_lock(f::Function, artifacts_toml)
-    return mkpidlock(f, joinpath(dirname(artifacts_toml), artifact_lock_name()))
-end
+create_usage_lock(args...) = (global usage_lock_name; create_file_lock(args..., usage_lock_name))
+create_artifact_lock(args...) = (global artifact_lock_name; create_file_lock(args..., artifact_lock_name))
 
 ## macros
 
@@ -165,6 +145,11 @@ Base.:(==)(a::SHA256, b::SHA256) = a.bytes == b.bytes
 
 ## artifacts ##
 
+"""
+    load_my_artifacts_toml(artifacts_toml::String)
+
+Safely read the `artifacts_toml`, return a `Dict{String, Any}` of binding name to sha256 hash.
+"""
 function load_my_artifacts_toml(artifacts_toml::String)
     # Create a file lock with name `artifact_lock` and parse the toml.
     # Avoid parallel read write with the lock, so if other process is
@@ -200,8 +185,8 @@ See also: [`my_artifact_exists`](@ref)
 function my_artifact_path(hash::SHA256)
     artifacts_dir = get_artifacts_dir()
     prefix = bytes2hex(hash.bytes[1])
-    path = joinpath(artifacts_dir, prefix, string(hash))
-    mkpath(dirname(path))
+    dir = joinpath(artifacts_dir, prefix) |> mkpath
+    path = joinpath(dir, string(hash))
     return path
 end
 
@@ -217,8 +202,8 @@ end
 """
     create_my_artifact(f::Function)
 
-Creates a new artifact by doing `path = f(working_dir)`, hashing the returned `path`, and moving it to
- the artifact store. Returns the identifying hash of this artifact.
+Create a new artifact by doing `path = f(working_dir)`, hashing the content of returned file pointed
+ by `path`, and moving it to the artifact store. Returns the identifying hash of this artifact.
 
 `f(working_dir)` should return an absolute path to a single file at the top level of `working_dir`.
 """
@@ -292,11 +277,8 @@ function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::S
         )
 
         artifact_dict[name] = meta
-        let artifact_dict = artifact_dict
-            open(artifacts_toml, "w") do io
-                TOML.print(io, artifact_dict, sorted=true)
-            end
-        end
+        # Write the result to file
+        write_toml(artifacts_toml, artifact_dict)
     finally
         close(artifact_lock)
     end
@@ -347,12 +329,8 @@ function track_my_artifacts(artifacts_toml::String, name::AbstractString, hash::
             usage_toml[artifact_path] = usage_dict
         end
 
-        # write the result to file
-        let usage_toml = usage_toml
-            open(usage_file, "w") do io
-                TOML.print(io, usage_toml, sorted=true)
-            end
-        end
+        # Write the result to file
+        write_toml(usage_file, usage_toml)
     finally
         close(usage_lock)
     end
@@ -377,7 +355,7 @@ function download_my_artifact!(downloadf::Function, url, name::AbstractString, a
     #   multiple times, but not at the same time. This is unavoidable because we use
     #   content hash and we cannot know the the content hash without actual downloading.
     lockname = bytes2hex(sha1(string(url)))
-    hash = mkpidlock(joinpath(dirname(artifacts_toml), "$(lockname).lock")) do
+    hash = create_file_lock(artifacts_toml, "$(lockname).lock") do
         create_my_artifact() do artifact_dir
             downloadf(url, tempname(artifact_dir; cleanup=false); downloadf_kwarg...)
         end
@@ -415,11 +393,7 @@ function unbind_my_artifact!(artifacts_toml::String, name::AbstractString)
         #   Notice that we didn't update the usage dict at this moment.
         #     It's done in `find_orphanages` so that we don't frequently update
         #     the usage toml.
-        let artifact_dict = artifact_dict
-            open(artifacts_toml, "w") do io
-                TOML.print(io, artifact_dict, sorted=true)
-            end
-        end
+        write_toml(artifacts_toml, artifact_dict)
     finally
         close(artifact_lock)
     end
@@ -438,8 +412,6 @@ function find_orphanages(; collect_delay::Period=Day(7))
     usage_lock = create_usage_lock(usage_file)
     try
         usage_toml = parse_toml(usage_file)
-        # handle mixture of old and new cache structure
-        usage_toml = merge_usage_toml(usage_toml)
 
         # find orphan artifacts
         # orphanage :: Vector{Cache_path => Last_modified_time}
@@ -517,11 +489,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
         end
 
         # update usage toml
-        let usage_toml = usage_toml
-            open(usage_file, "w") do io
-                TOML.print(io, usage_toml, sorted=true)
-            end
-        end
+        write_toml(usage_file, usage_toml)
 
         # merge old and new orphan list
         #   if the entry already on the list, keep the old recorded time
@@ -545,11 +513,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
         end
 
         # update the resulted orphanage to file
-        let new_orphans = new_orphans
-            open(orphanage_file, "w") do io
-                TOML.print(io, new_orphans, sorted=true)
-            end
-        end
+        write_toml(orphanage_file, new_orphans)
 
         # delete my artifacts
         # BEGIN: utility functions for deletion

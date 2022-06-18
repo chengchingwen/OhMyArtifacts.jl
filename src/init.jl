@@ -1,7 +1,9 @@
+const _SCRATCHSPACE = Ref{String}()
+
 maybe_init() = need_init() && init()
 function need_init()
-    global ARTIFACTS_DIR
-    return !isdefined(ARTIFACTS_DIR, :x)
+    global _SCRATCHSPACE
+    return !isdefined(_SCRATCHSPACE, :x)
 end
 
 """
@@ -9,36 +11,32 @@ end
 
 Initialize the storage space.
 
-Generally you don't have to manually call this function. It would be called everytime you 
+Generally you don't have to manually call this function. It would be called everytime you
  call `my_artifacts_toml!`. This function would setup the scratch space we need, check if
  we need to recycle some storages.
 """
 function init()
-    global ARTIFACTS_DIR, LOG_DIR, _OLD_ARTIFACTS_DIR
+    global _SCRATCHSPACE
     # Create `OMA` scratch space and artifacts folder
-    artifacts_dir = @get_scratch!("ohmyartifacts")
-    log_dir = @get_scratch!("logs")
-    scratch_dir = dirname(artifacts_dir)
-    ARTIFACTS_DIR[] = artifacts_dir
-    LOG_DIR[] = log_dir
-    _OLD_ARTIFACTS_DIR[] = joinpath(scratch_dir, "artifacts")
+    scratchspace = @get_scratch!("0.3")
+    _SCRATCHSPACE[] = scratchspace
 
-    # convert old cache structure to new one
-    migration(scratch_dir)
+    # `mkpath`s
+    artifacts_dir = joinpath(scratchspace, "artifacts") |> mkpath
+    log_dir = joinpath(scratchspace, "logs") |> mkpath
 
-    # Get orphanage file path
-    orphan_file = orphanages_toml_path()
-    # Get the last modified time of the orphange file (create orphanage file if not exist)
-    last_gc_time = if isfile(orphan_file)
-        modified_time(orphan_file)
-    else
-        orphanages_toml()
-        now()
-    end
+    # Log file path
+    orphan_file = joinpath(log_dir, "my_artifact_orphanages.toml")
+    usage_file  = joinpath(log_dir, "my_artifact_usage.toml")
+
+    # `touch` files
+    touch(usage_file)
+    isfile(orphan_file) || touch(orphan_file)
+
+    # Record modified time of the orphanage file
+    last_gc_time = modified_time(orphan_file)
     # Make a cleanup if we haven't do it for 7 days
-    if now() - last_gc_time >= Day(7)
-        find_orphanages()
-    end
+    (now() - last_gc_time >= Day(14)) && find_orphanages()
 
     return
 end
