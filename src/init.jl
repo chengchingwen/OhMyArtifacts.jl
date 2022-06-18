@@ -6,6 +6,23 @@ function need_init()
     return !isdefined(_SCRATCHSPACE, :x)
 end
 
+function get_scratchspace()
+    global _SCRATCHSPACE
+    maybe_init()
+    return _SCRATCHSPACE[]
+end
+
+get_artifacts_dir() = joinpath(get_scratchspace(), "artifacts")
+get_log_dir() = joinpath(get_scratchspace(), "logs")
+orphanages_toml() = joinpath(get_log_dir(), "my_artifact_orphanages.toml")
+usages_toml() = joinpath(get_log_dir(), "my_artifact_usage.toml")
+
+const usage_lock_name = ".my_artifact_usage_lock"
+const artifact_lock_name = "artifact_lock"
+
+create_usage_lock(args...) = (global usage_lock_name; create_file_lock(args..., usage_lock_name))
+create_artifact_lock(args...) = (global artifact_lock_name; create_file_lock(args..., artifact_lock_name))
+
 """
     init()
 
