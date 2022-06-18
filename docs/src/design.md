@@ -31,28 +31,36 @@ We mentioned a few features and issues that we want to solve, but how does it wo
 
 ```
 OhMyArtifacts-scratchspace/
-  |- artifacts/ (for v0.2 compatible)
-	|- <some sha256 string> -> ohmyartifacts/<1-byte-prefix>/<some sha256 string>
-  |- my_artifact_usage.toml -> logs/my_artifact_usage.toml
-  |- my_artifact_orphanages.toml -> logs/my_artifact_orphanages.toml
   |- logs/
     |- my_artifact_usage.toml
     |- my_artifact_orphanages.toml
-  |- ohmyartifacts/
+  |- artifacts/
 	|_ <1-byte-prefix>/
 	  |- <some sha256 string>
 	...
   |- Package-A-scratchspace/
 	|- Artifacts.toml
+	|- foldertree
+		|- <some sha256 string>/
+		...
   |- Package-B-scratchspace/
   |- ...
   ...
 ```
 
-1. The `ohmyartifacts` folder contains all the cache. Each cache is a read-only file whose name is its
+`Artifacts.toml` has two kinds of entry, `isdir = true` and `isdir = false`. When `isdir = true`, the sha256 hash
+ is the tree hash of the entire directory. The directory structure is shadowed in `foldertree` with the 
+ tree hash as folder name. For every file in the folder, the usage is recorded and marked by that folder entry,
+ so whenever the binding of that folder is removed, the usage for every file can be correctly updated. When
+ unbinding the folder, the folder in `foldertree` is also removed. Every non-folder file in `foldertree` is a
+ symbolic link points to the real file in `artifacts`. The tree hash is computed on the original folder
+ (which we don't really preserve), the tree hash of the shadow folder would be complete different.
+ 
+
+1. The `artifacts` folder contains all the cache. Each cache is a read-only file whose name is its
  content sha256 hash. The cache is sorted and put in a directory with the name of it's first byte.
  For example, a sha256 string "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
- would be put in `ohmyartifacts/01/`.
+ would be put in `artifacts/01/`.
 2. `my_artifact_usage.toml` is a log file, which track all the usage of each cache. Can be seemed as
  a dictionary mapping from cache to a list of Artifacts.toml that use that cache. We use this to know
  whether a cache can be recycled without causing problems.
@@ -64,7 +72,7 @@ OhMyArtifacts-scratchspace/
  usage/orphanages toml will need to be updated. This depends on the recycle mechanism of Scratch.jl.
 5. The Artifacts.toml in the scratchspace is the entry point of the OhMyArtifacts api. When caching
  a file, the api would create a mapping in the Artifacts.toml which map from a name to a sha256 hash.
- So when loading the file, the path is just the path of `ohmyartifacts` folder with the a prefix and the hash.
+ So when loading the file, the path is just the path of `artifacts` folder with the a prefix and the hash.
 
 
 ## Old design
