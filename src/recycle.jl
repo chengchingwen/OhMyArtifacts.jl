@@ -24,7 +24,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
         #
         #   For all cache in the `ohmyartifacts` dir, check if there exist a record in the usage log.
         #     If not, add to `orphanage`. They can be removed safely.
-        for artifact_path in readdirfiles(artifacts_dir)
+        for artifact_path in readdirdepth(==(1), artifacts_dir)
             hash = tryparse(SHA256, basename(artifact_path))
             # not a cache
             isnothing(hash) && continue

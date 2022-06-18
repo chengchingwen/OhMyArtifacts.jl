@@ -24,6 +24,21 @@ end
 # recursively walk through the dir and find all files
 readdirfiles(dir) = mapreduce(x->map(Base.Fix1(joinpath, x[1]), x[end]), append!, walkdir(dir); init=String[])
 
+# readdir depends on the depth
+function readdirdepth(f, dir; files_only=false)
+    p = length(dir) + !isdirpath(dir)
+    s = String[]
+    for (root, dirs, files) in walkdir(dir)
+        relroot = chop(root, head=p, tail=0)
+        depth = isempty(relroot) ? 0 : length(splitpath(relroot))
+        if f(depth)
+            append!(s, Iterators.map(Base.Fix1(joinpath, root), files))
+            files_only || append!(s, Iterators.map(Base.Fix1(joinpath, root), dirs))
+        end
+    end
+    return s
+end
+
 ## SHA256 ##
 
 struct SHA256
