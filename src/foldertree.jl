@@ -34,12 +34,12 @@ function create_foldertree(f::Function)
                 _link_path = readlink(file)
                 abs_link_path = isabspath(_link_path) ? _link_path : abspath(joinpath(root, _link_path))
                 if !(isfile(abs_link_path) || isdir(abs_link_path))
-                    @error "symlink $file_path points to non-exists file $abs_link_path, skip"
+                    @error "symlink $file points to non-exists file $abs_link_path, skip"
                     continue
                 end
 
                 if !startswith(abs_link_path, abspath(source_dir))
-                    @error "symlink $file_path points to outside of input path $(abspath(path)) thus skip: $abs_link_path"
+                    @error "symlink $file points to outside of input path $(abspath(source_dir)) thus skip: $abs_link_path"
                     continue
                 end
 
@@ -55,13 +55,17 @@ function create_foldertree(f::Function)
         p = length(source_dir) + !isdirpath(source_dir)
         for (root, dirs, files) in walkdir(source_dir)
             relroot = chop(root, head=p, tail=0)
+            # skiping .git folder
+            paths = splitpath(relroot)
+            ".git" in paths && continue
+
             shadow_root = joinpath(shadow_dir, relroot) |> mkpath
             for dir in dirs
                 joinpath(shadow_root, dir) |> mkpath
             end
 
             for file in files
-                shadow_file_path = joinpath(shadow_dir, file)
+                shadow_file_path = joinpath(shadow_root, file)
                 file_path = joinpath(root, file)
                 if islink(file_path)
                     if haskey(symlinks, file_path)
