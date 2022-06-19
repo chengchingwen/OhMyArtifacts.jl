@@ -22,7 +22,7 @@ function find_orphanages(; collect_delay::Period=Day(7))
         #     (and usage toml has been updated in the previous `find_orphanages`, the usage dict will
         #     be empty and thus no record in usage log.
         #
-        #   For all cache in the `ohmyartifacts` dir, check if there exist a record in the usage log.
+        #   For all cache in the `artifacts` dir, check if there exist a record in the usage log.
         #     If not, add to `orphanage`. They can be removed safely.
         for artifact_path in readdirdepth(==(1), artifacts_dir)
             hash = tryparse(SHA256, basename(artifact_path))
@@ -44,8 +44,11 @@ function find_orphanages(; collect_delay::Period=Day(7))
         #   If a binding is removed with `unbind`, since we didn't update the usage toml at that moment,
         #     the usage update is done here.
         curr_gc_time = now()
+        foldertree_usage = Dict{String, Any}()
         for (artifact_path, usage_dict) in usage_toml
             # check if all bindings are removed
+            artifact_hash = basename(artifact_path)
+            artifact_type = isdir(artifact_path)
 
             for (artifacts_toml, entrys) in usage_dict
                 if !isfile(artifacts_toml)
@@ -68,16 +71,78 @@ function find_orphanages(; collect_delay::Period=Day(7))
                         else
                             # binding exist, make sure it did not get force update
                             hash = artifact_dict[entry]["sha256"]
-                            if hash != basename(artifact_path)
-                                # binding is forcely updated
-                                delete!(entrys, entry)
+                            bound_path = my_artifact_path(SHA256(hash))
+                            bound_type = isdir(bound_path)
+                            if artifact_type == bound_type
+                                # same kinds of cache (both file or both folder)
+                                if hash != artifact_hash
+                                    # binding is forcely updated
+                                    delete!(entrys, entry)
+                                end
+                            else
+                                if artifact_type # artifact is dir but replaced by file
+                                    # simply remove the entry
+                                    delete!(entrys, entry)
+                                else
+                                    # Either artifact is file but replaced by dir,
+                                    #   or artifact is the subfile of that folder.
+
+                                    # Record that folder `bound_path` might have a usage
+                                    #   to `artifact_path`, would need to delete from `entrys`,
+                                    #   at binging `entry`.
+                                    #
+                                    # We defer the update of folder so we don't have to walk through
+                                    #   the dir multiple times.
+                                    #
+                                    # foldertree_usage :: Dict{DirPath =>
+                                    #                          Dict{CachePath => Dict{Mappings => List{Binding}}}}
+                                    if haskey(foldertree_usage, bound_path)
+                                        folder_usage_dict = foldertree_usage[bound_path]
+                                        folder_usage_entrys = get!(folder_usage_dict, artifact_path, Dict())
+                                        folder_usage_list = get!(folder_usage_entrys, entrys, [])
+                                        push!(folder_usage_list, entry)
+                                    else
+                                        foldertree_usage[bound_path] = Dict{String, Any}(
+                                            artifact_path => Dict{Any, Any}(
+                                                entrys => Any[entry]
+                                            )
+                                        )
+                                    end
+                                end
                             end
                         end
                     end
-
-                    # if no binding exists, remove this usage
-                    isempty(entrys) && delete!(usage_dict, artifacts_toml)
                 end
+            end
+        end
+
+        for (folder_path, file_dict) in foldertree_usage
+            # read all lnik points to cache in the folder
+            subfiles = filter(isabspath, Iterators.map(readlink, readdirfiles(folder_path)))
+
+            for subfile in subfiles
+                # if those mapping are pointing to correct folder, removed from dict.
+                #   The rest will be treat as orphans
+                if haskey(file_dict, subfile)
+                    delete!(file_dict, subfile)
+                end
+            end
+
+            # remove the entry that points to the wrong dir
+            for (artifacts_path, mapping_dict) in file_dict
+                for (entrys, entry_list) in mapping_dict
+                    for entry in entry_list
+                        delete!(entrys, entry)
+                    end
+                end
+            end
+        end
+
+        # check if any entrys or usage dict is empty and remove them, the result is the new usage toml
+        for (artifact_path, usage_dict) in usage_toml
+            for (artifacts_toml, entrys) in usage_dict
+                # if no binding exists, remove this usage
+                isempty(entrys) && delete!(usage_dict, artifacts_toml)
             end
 
             if isempty(usage_dict)
@@ -160,4 +225,3 @@ function find_orphanages(; collect_delay::Period=Day(7))
     end
     return
 end
-

@@ -64,7 +64,7 @@ Create a new artifact by doing `path = f(working_dir)`, hashing the content of r
 """
 function create_my_artifact(f::Function)
     artifacts_dir = get_artifacts_dir()
-    # create a tempdir in `ohmyartifacts` dir
+    # create a tempdir in `artifacts` dir
     temp_dir = mktempdir(artifacts_dir)
 
     try
@@ -84,7 +84,7 @@ function create_my_artifact(f::Function)
         artifact_hash_str = string(artifact_hash)
         new_path = my_artifact_path(artifact_hash)
 
-        # Create a file lock in `ohmyartifacts` dir with name `$hash.lock`.
+        # Create a file lock in `artifacts` dir with name `$hash.lock`.
         # avoid other process creating the same cache at the same time.
         filelock = mkpidlock(joinpath(artifacts_dir, "$(artifact_hash_str).lock"))
         try
@@ -129,6 +129,7 @@ function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::S
 
         meta =  Dict{String,Any}(
             "sha256" => string(hash),
+            "isdir" => isdir(my_artifact_path(hash)),
         )
 
         artifact_dict[name] = meta
