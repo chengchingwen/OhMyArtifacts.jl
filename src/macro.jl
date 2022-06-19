@@ -21,13 +21,6 @@ function get_artifacts_toml_sym()
     return ARTIFACTS_TOML_VAR_SYM[]
 end
 
-function cached_my_artifact_toml_path(mod::Module)
-    sym = get_artifacts_toml_sym()
-    !isdefined(mod, sym) && return nothing
-    path = getfield(mod, sym)
-    return (path isa Ref ? path[] : path)::String
-end
-
 function cached_my_artifact_toml_expr(mod::Module)
     sym = get_artifacts_toml_sym()
     !isdefined(mod, sym) && return nothing
