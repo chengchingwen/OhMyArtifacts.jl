@@ -37,7 +37,7 @@ See also: [`my_artifact_exists`](@ref)
 """
 function my_artifact_path(hash::SHA256)
     artifacts_dir = get_artifacts_dir()
-    prefix = bytes2hex(hash.bytes[1])
+    prefix = bytes2hex((hash.bytes[1],))
     dir = joinpath(artifacts_dir, prefix) |> mkpath
     path = joinpath(dir, string(hash))
     return path

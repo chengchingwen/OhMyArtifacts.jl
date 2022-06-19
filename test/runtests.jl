@@ -31,8 +31,8 @@ end
         hash_b = create_my_artifact() do artifact_dir
             cp(joinpath(@__DIR__, "utils.jl"), joinpath(artifact_dir, "a"))
         end
-        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex(hash_a.bytes[1]), string(hash_a)))
-        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex(hash_b.bytes[1]), string(hash_b)))
+        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex((hash_a.bytes[1],)), string(hash_a)))
+        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex((hash_b.bytes[1],)), string(hash_b)))
         @test isfile(my_artifact_path(hash_a))
         @test isfile(my_artifact_path(hash_b))
         @test my_artifact_exists(hash_a)
@@ -179,9 +179,9 @@ end
         end
         @test length(read_artifacts()) == 7
 
-        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex(hash_a.bytes[1]), string(hash_a)))
-        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex(hash_b.bytes[1]), string(hash_b)))
-        @test isdir(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex(hash_f.bytes[1]), string(hash_f)))
+        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex((hash_a.bytes[1],)), string(hash_a)))
+        @test isfile(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex((hash_b.bytes[1],)), string(hash_b)))
+        @test isdir(joinpath(OhMyArtifacts.get_artifacts_dir(), bytes2hex((hash_f.bytes[1],)), string(hash_f)))
         @test isfile(my_artifact_path(hash_a))
         @test isfile(my_artifact_path(hash_b))
         @test isdir(my_artifact_path(hash_f))
