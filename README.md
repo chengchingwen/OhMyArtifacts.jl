@@ -67,3 +67,97 @@ end
 
 end # module
 ```
+
+# Example
+
+An OhMyArtifacts version of the iris example.
+
+```julia
+julia> using OhMyArtifacts
+[ Info: Precompiling OhMyArtifacts [cf8be1f4-309d-442e-839d-29d2a0af6cb7]
+
+# register and get the Artifacts.toml
+julia> myartifacts_toml = @my_artifacts_toml!();
+
+# Query the Artifacts.toml for the hash bound to "iris"
+julia> iris_hash = my_artifact_hash("iris", myartifacts_toml)
+
+# if not bound
+julia> if isnothing(iris_hash)
+           iris_hash = create_my_artifact() do working_dir
+               iris_url_base = "https://archive.ics.uci.edu/ml/machine-learning-databases/iris"
+               download("$iris_url_base/iris.data", joinpath(working_dir, "iris.csv"))
+               download("$iris_url_base/bezdekIris.data", joinpath(working_dir, "bezdekIris.csv"))
+               download("$iris_url_base/iris.names", joinpath(working_dir, "iris.names"))
+               # explicitly return the path
+               return working_dir
+           end
+           bind_my_artifact!(myartifacts_toml, "iris", iris_hash)
+       end
+
+julia> iris_hash
+SHA256("83c1aca5f0e9d222dee51861b3def4e789e57b17b035099570c54b51182853d4")
+
+julia> my_artifact_exists(iris_hash)
+true
+
+# get the artifact path
+julia> iris_dataset_path = my_artifact_path(iris_hash);
+
+julia> readdir(iris_dataset_path)
+3-element Vector{String}:
+ "bezdekIris.csv"
+ "iris.csv"
+ "iris.names"
+
+julia> readline(joinpath(iris_dataset_path, "iris.names"))
+"1. Title: Iris Plants Database"
+
+# every subfile is a symlink
+julia> all(islink, readdir(iris_dataset_path, join=true))
+true
+
+# helper function that combine create and bind
+julia> iris_name_hash = download_my_artifact!(Base.download, "https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.names", "iris.names", myartifacts_toml)
+SHA256("38043f885d7c8cfb6d2cec61020b9bc6946c5856aadad493772ee212ef5ac891")
+
+# same value
+julia> readline(my_artifact_path(iris_name_hash))
+"1. Title: Iris Plants Database"
+
+# same file
+julia> readlink(joinpath(iris_dataset_path, "iris.names")) == my_artifact_path(iris_name_hash)
+true
+
+# unbind iris dataset
+julia> unbind_my_artifact!(myartifacts_toml, "iris")
+
+julia> using Dates
+
+# recycle: "iris/iris.names" is also used by "iris.names", only
+#  removed 2 file ("iris/iris.csv", "iris/bezdekIris.csv") and 1 folder ("iris")
+julia> OhMyArtifacts.find_orphanages(; collect_delay=Hour(0))
+[ Info: 3 MyArtifacts deleted (24.889 KiB)
+
+# "iris.names" still exists
+julia> my_artifact_exists(iris_name_hash)
+true
+
+julia> readline(my_artifact_path(iris_name_hash))
+"1. Title: Iris Plants Database"
+
+# iris dataset is removed
+julia> my_artifact_exists(iris_hash)
+false
+
+julia> isdir(iris_dataset_path)
+false
+
+# unbind and recycle
+julia> unbind_my_artifact!(myartifacts_toml, "iris.names")
+
+# When `using OhMyArtifacts`, this function is called if we haven't do it for 7 days, so
+#  geneally we don't need to manually call it.
+julia> OhMyArtifacts.find_orphanages(; collect_delay=Hour(0))
+[ Info: 1 MyArtifact deleted (10.928 KiB)
+```
