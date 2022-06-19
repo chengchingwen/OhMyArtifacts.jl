@@ -42,6 +42,10 @@ function readdirdepth(f, dir; files_only=false, dirs_only=false)
     return s
 end
 
+@static if VERSION < v"1.7"
+    nand(x...) = ~(&)(x...)
+end
+
 ## SHA256 ##
 
 struct SHA256
