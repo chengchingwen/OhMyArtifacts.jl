@@ -12,7 +12,8 @@ using Pidfile
 
 export my_artifacts_toml!, @my_artifacts_toml!, @my_artifact
 export create_my_artifact, bind_my_artifact!, download_my_artifact!,
-    my_artifact_hash, my_artifact_path, my_artifact_exists
+    unbind_my_artifact!, load_my_artifacts_toml, my_artifact_hash,
+    my_artifact_path, my_artifact_exists
 
 """
     my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
@@ -44,10 +45,10 @@ include("./utils.jl")
 include("./init.jl")
 include("./macro.jl")
 
-# artifacts api
-include("./artifacts.jl")
+# public api
+include("./api.jl")
 
-# foldertree api
+include("./artifacts.jl")
 include("./foldertree.jl")
 
 # recycle

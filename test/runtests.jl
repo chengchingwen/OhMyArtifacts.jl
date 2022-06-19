@@ -22,7 +22,7 @@ end
         @test isdir(OhMyArtifacts.get_artifacts_dir())
         @test isfile(artifacts_toml)
         @test startswith(artifacts_toml, OhMyArtifacts.get_scratchspace())
-        @test isempty(OhMyArtifacts.load_my_artifacts_toml(artifacts_toml))
+        @test isempty(load_my_artifacts_toml(artifacts_toml))
 
         # test create for file
         hash_a = create_my_artifact() do artifact_dir
@@ -41,7 +41,7 @@ end
         # test bind for file
         bind_my_artifact!(artifacts_toml, "runtestfile", hash_a)
         bind_my_artifact!(artifacts_toml, "utils.jl", hash_b)
-        @test length(OhMyArtifacts.load_my_artifacts_toml(artifacts_toml)) == 2
+        @test length(load_my_artifacts_toml(artifacts_toml)) == 2
         @test my_artifact_hash("runtestfile", artifacts_toml) == hash_a
         @test my_artifact_hash("utils.jl", artifacts_toml) == hash_b
 
@@ -56,8 +56,8 @@ end
         @test now() - usage[my_artifact_path(hash_b)][artifacts_toml]["utils.jl"] < Day(1)
 
         # test unbind: file won't be directly removed when unbind
-        OhMyArtifacts.unbind_my_artifact!(artifacts_toml, "utils.jl")
-        @test length(OhMyArtifacts.load_my_artifacts_toml(artifacts_toml)) == 1
+        unbind_my_artifact!(artifacts_toml, "utils.jl")
+        @test length(load_my_artifacts_toml(artifacts_toml)) == 1
         @test my_artifact_exists(hash_a)
         @test my_artifact_exists(hash_b)
 
@@ -82,7 +82,7 @@ end
         @test isempty(orphan)
 
         # test recycle
-        OhMyArtifacts.unbind_my_artifact!(artifacts_toml, "utils.jl")
+        unbind_my_artifact!(artifacts_toml, "utils.jl")
         OhMyArtifacts.find_orphanages(; collect_delay=Hour(0))
         orphan = OhMyArtifacts.parse_toml(orphanfile)
         @test isempty(orphan)
@@ -120,12 +120,12 @@ end
         # test bind on existing binding
         bind_my_artifact!(artifacts_toml, "A", hash_a)
         @test_throws ErrorException bind_my_artifact!(artifacts_toml, "A", hash_b)
-        @test length(OhMyArtifacts.load_my_artifacts_toml(artifacts_toml)) == 1
+        @test length(load_my_artifacts_toml(artifacts_toml)) == 1
         @test my_artifact_hash("A", artifacts_toml) == hash_a
 
         # test force bind
         bind_my_artifact!(artifacts_toml, "A", hash_b; force=true)
-        @test length(OhMyArtifacts.load_my_artifacts_toml(artifacts_toml)) == 1
+        @test length(load_my_artifacts_toml(artifacts_toml)) == 1
         @test my_artifact_hash("A", artifacts_toml) == hash_b
 
         # check usage file is not updated
@@ -165,7 +165,7 @@ end
         artifacts_toml = @my_artifacts_toml!()
 
         # test create folder: copy OhMyArtifacts docs folder
-        hash_f = OhMyArtifacts.create_foldertree() do working_dir
+        hash_f = create_my_artifact() do working_dir
             path = joinpath(working_dir, "ohmy")
             cp(joinpath(dirname(@__DIR__), "docs"), path)
         end
@@ -190,17 +190,17 @@ end
         @test my_artifact_exists(hash_f)
 
         # test bind for folder
-        OhMyArtifacts.bind_foldertree!(artifacts_toml, "ohmydocs", hash_f)
+        bind_my_artifact!(artifacts_toml, "ohmydocs", hash_f)
         bind_my_artifact!(artifacts_toml, "A", hash_a)
         bind_my_artifact!(artifacts_toml, "make", hash_b)
 
-        @test length(OhMyArtifacts.load_my_artifacts_toml(artifacts_toml)) == 3
+        @test length(load_my_artifacts_toml(artifacts_toml)) == 3
         @test my_artifact_hash("A", artifacts_toml) == hash_a
         @test my_artifact_hash("make", artifacts_toml) == hash_b
         @test my_artifact_hash("ohmydocs", artifacts_toml) == hash_f
 
         # check shadow folder
-        @test list_folder(joinpath(my_artifact_path(hash_f), "ohmy")) == list_folder(joinpath(dirname(@__DIR__), "docs"))
+        @test list_folder(my_artifact_path(hash_f)) == list_folder(joinpath(dirname(@__DIR__), "docs"))
 
         # check usage is tracked correctly
         usagefile = OhMyArtifacts.usages_toml()
@@ -216,8 +216,8 @@ end
         @test now() - usage[my_artifact_path(hash_f)][artifacts_toml]["ohmydocs"] < Day(1)
 
         # test unbind: file won't be directly removed when unbind
-        OhMyArtifacts.unbind_my_artifact!(artifacts_toml, "ohmydocs")
-        @test length(OhMyArtifacts.load_my_artifacts_toml(artifacts_toml)) == 2
+        unbind_my_artifact!(artifacts_toml, "ohmydocs")
+        @test length(load_my_artifacts_toml(artifacts_toml)) == 2
         @test my_artifact_exists(hash_a)
         @test my_artifact_exists(hash_b)
         @test my_artifact_exists(hash_f)
@@ -239,13 +239,13 @@ end
         @test my_artifact_exists(hash_f)
 
         # test rebind correctly remove entry in orphan file
-        OhMyArtifacts.bind_foldertree!(artifacts_toml, "ohmydocs", hash_f)
+        bind_my_artifact!(artifacts_toml, "ohmydocs", hash_f)
         OhMyArtifacts.find_orphanages()
         orphan = OhMyArtifacts.parse_toml(orphanfile)
         @test isempty(orphan)
 
         # test recycle
-        OhMyArtifacts.unbind_my_artifact!(artifacts_toml, "ohmydocs")
+        unbind_my_artifact!(artifacts_toml, "ohmydocs")
         OhMyArtifacts.find_orphanages(; collect_delay=Hour(0))
         orphan = OhMyArtifacts.parse_toml(orphanfile)
         @test isempty(orphan)
