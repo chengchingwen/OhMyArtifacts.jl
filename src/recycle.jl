@@ -118,7 +118,10 @@ function find_orphanages(; collect_delay::Period=Day(7))
 
         for (folder_path, file_dict) in foldertree_usage
             # read all lnik points to cache in the folder
-            subfiles = filter(isabspath, Iterators.map(readlink, readdirfiles(folder_path)))
+            subfiles = foldl(Iterators.map(readlink, readdirfiles(folder_path)); init=String[]) do s, f
+                isabspath(f) && push!(s, f)
+                return s
+            end
 
             for subfile in subfiles
                 # if those mapping are pointing to correct folder, removed from dict.
@@ -207,11 +210,31 @@ function find_orphanages(; collect_delay::Period=Day(7))
             end
             return path_size
         end
+
+        function delete_folder(path)
+            path_size = file_size(path)
+            try
+                Base.Filesystem.prepare_for_deletion(path)
+                Base.rm(path; recursive=false, force=true)
+            catch e
+                @warn("Failed to delete $path", exception=e)
+                return 0
+            end
+            return path_size
+        end
         # END: utility functions for deletion
 
+        # remove artifacts
         space_freed = 0
         for artifact_path in deletion_list
             space_freed += delete_path(artifact_path)
+        end
+
+        for dir in readdirdepth(==(0), artifacts_dir; dirs_only=true)
+            # remove empty folders
+            if length(basename(dir)) == 2 && isempty(readdir(dir))
+                space_freed += delete_folder(dir)
+            end
         end
 
         ndel = length(deletion_list)
