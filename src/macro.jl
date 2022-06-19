@@ -1,3 +1,26 @@
+## macros ##
+
+"""
+    @my_artifacts_toml!()
+
+Convenience macro that gets/creates a "Artifacts.toml" and parented to the package the calling module belongs to.
+
+See also: [`my_artifacts_toml!`](@ref)
+"""
+macro my_artifacts_toml!()
+    uuid = Base.PkgId(__module__).uuid
+    return quote
+        my_artifacts_toml!($(esc(uuid)))
+    end
+end
+
+const ARTIFACTS_TOML_VAR_SYM = Ref{Symbol}(:my_artifacts)
+
+function get_artifacts_toml_sym()
+    global ARTIFACTS_TOML_VAR_SYM
+    return ARTIFACTS_TOML_VAR_SYM[]
+end
+
 function cached_my_artifact_toml_path(mod::Module)
     sym = get_artifacts_toml_sym()
     !isdefined(mod, sym) && return nothing
