@@ -22,17 +22,20 @@ function write_toml(file, toml)
 end
 
 # recursively walk through the dir and find all files
-readdirfiles(dir) = mapreduce(x->map(Base.Fix1(joinpath, x[1]), x[end]), append!, walkdir(dir); init=String[])
+readdirfiles(dir) = readdirdepth(Base.Fix2(isa, Int), dir; files_only=true)
 
 # readdir depends on the depth
-function readdirdepth(f, dir; files_only=false)
+function readdirdepth(f, dir; files_only=false, dirs_only=false)
+    @assert nand(files_only, dirs_only) "files_only and dirs_only cannot both be true"
     p = length(dir) + !isdirpath(dir)
     s = String[]
     for (root, dirs, files) in walkdir(dir)
         relroot = chop(root, head=p, tail=0)
-        depth = isempty(relroot) ? 0 : length(splitpath(relroot))
+        paths = splitpath(relroot)
+        ".git" in paths && continue
+        depth = isempty(relroot) ? 0 : length(paths)
         if f(depth)
-            append!(s, Iterators.map(Base.Fix1(joinpath, root), files))
+            dirs_only || append!(s, Iterators.map(Base.Fix1(joinpath, root), files))
             files_only || append!(s, Iterators.map(Base.Fix1(joinpath, root), dirs))
         end
     end
