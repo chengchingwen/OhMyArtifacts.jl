@@ -48,7 +48,7 @@ include("./macro.jl")
 include("./artifacts.jl")
 
 # foldertree api
-# include("./foldertree.jl")
+include("./foldertree.jl")
 
 # recycle
 include("./recycle.jl")

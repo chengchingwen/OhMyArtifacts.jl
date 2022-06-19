@@ -51,7 +51,8 @@ end
 Returns whether the given artifact (identified by its SHA256 content hash) exists on-disk.
 """
 function my_artifact_exists(hash::SHA256)
-    return isfile(my_artifact_path(hash))
+    path = my_artifact_path(hash)
+    return isfile(path) || isdir(path)
 end
 
 """
@@ -61,6 +62,8 @@ Create a new artifact by doing `path = f(working_dir)`, hashing the content of r
  by `path`, and moving it to the artifact store. Returns the identifying hash of this artifact.
 
 `f(working_dir)` should return an absolute path to a single file at the top level of `working_dir`.
+
+See also: [`create_foldertree`](@ref)
 """
 function create_my_artifact(f::Function)
     artifacts_dir = get_artifacts_dir()
@@ -108,8 +111,10 @@ end
 """
     bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false)
 
-Writes a mapping of `name` -> `hash` within the given "Artifacts.toml" file. If `force` is set to `true`,
- this will overwrite a pre-existant mapping, otherwise an error is raised.
+Writes a mapping of `name` -> `hash` in the given "Artifacts.toml" file and track the usage. If `force`
+ is set to `true`, this will overwrite a pre-existant mapping, otherwise an error is raised.
+
+See also: [`bind_foldertree!`](@ref)
 """
 function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false)
     # Create a file lock with name `artifact_lock`. `load`/`unbind` would need to wait
