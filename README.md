@@ -32,7 +32,8 @@ We are actually building on top of Scratch.jl. Scratch.jl provide a set of api f
  the builtin artifact system (Artifacts.jl), so generally it won't affect each other.
 
 
-For more detail, read the [document](https://img.shields.io/badge/docs-dev-blue.svg)](https://chengchingwen.github.io/OhMyArtifacts.jl/dev) or the comment in the source code
+
+For more detail, read the [document](https://chengchingwen.github.io/OhMyArtifacts.jl/dev) or the comment in the source code
 
 # API overview
 
