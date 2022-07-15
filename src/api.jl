@@ -173,10 +173,38 @@ function unbind_my_artifact!(artifacts_toml::String, name::AbstractString)
 
         # If the binding doesn't exist, skip
         !haskey(artifact_dict, name) && return
-
-        hash = artifact_dict[name]["sha256"]
         # Remove the binding from artifacts toml
         delete!(artifact_dict, name)
+
+        # Write the result to file
+        #   Notice that we didn't update the usage dict at this moment.
+        #     It's done in `find_orphanages` so that we don't frequently update
+        #     the usage toml.
+        write_toml(artifacts_toml, artifact_dict)
+    finally
+        close(artifact_lock)
+    end
+    return
+end
+
+"""
+    unbind_my_artifact!(artifacts_toml::String, names::Vector{String})
+
+Unbind the given list of `names` from the "Artifacts.toml" file.
+"""
+function unbind_my_artifact!(artifacts_toml::String, names)
+    # Create a file lock with name `artifact_lock`. `load`/`bind` would need to wait
+    #   until `unbind`ing finish
+    artifact_lock = create_artifact_lock(artifacts_toml)
+    try
+        artifact_dict = parse_toml(artifacts_toml)
+
+        for name in names
+            # If the binding doesn't exist, skip
+            !haskey(artifact_dict, name) && continue
+            # Remove the binding from artifacts toml
+            delete!(artifact_dict, name)
+        end
 
         # Write the result to file
         #   Notice that we didn't update the usage dict at this moment.

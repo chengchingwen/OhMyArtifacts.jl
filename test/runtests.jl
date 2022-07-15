@@ -254,5 +254,8 @@ end
         @test !my_artifact_exists(hash_f)
         @test length(read_artifacts()) == 2
 
+        unbind_my_artifact!(artifacts_toml, ["A", "make"])
+        OhMyArtifacts.find_orphanages(; collect_delay=Hour(0))
+        @test isempty(read_artifacts())
     end
 end
