@@ -219,7 +219,7 @@ end
 
 """
     download_my_artifact!([downloadf::Function = Downloads.download], url, name::AbstractString, artifacts_toml::String;
-                         force_bind::Bool = false, downloadf_kwarg...)
+                         force_bind::Bool = false, bind_metadata = nothing, downloadf_kwarg...)
 
 Convenient function that do download-create-bind together and return the content hash.
  Download function `downloadf` should take two position arguments
@@ -229,7 +229,7 @@ Convenient function that do download-create-bind together and return the content
 See also: [create_my_artifact](@ref), [bind_my_artifact!](@ref)
 """
 function download_my_artifact!(downloadf::Function, url, name::AbstractString, artifacts_toml::String;
-                               force_bind::Bool = false, downloadf_kwarg...)
+                               force_bind::Bool = false, bind_metadata = nothing, downloadf_kwarg...)
     # Create file lock with url sha1 hash as the lock name
     #   Avoid multiple downloading at the same time. It will still download the file
     #   multiple times, but not at the same time. This is unavoidable because we use
@@ -240,12 +240,13 @@ function download_my_artifact!(downloadf::Function, url, name::AbstractString, a
             downloadf(url, tempname(artifact_dir; cleanup=false); downloadf_kwarg...)
         end
     end
-    bind_my_artifact!(artifacts_toml, name, hash; force = force_bind)
+    bind_my_artifact!(artifacts_toml, name, hash; force = force_bind, metadata = bind_metadata)
 
     return hash
 end
 download_my_artifact!(
     url, name::AbstractString, artifacts_toml::String;
-    force_bind::Bool = false, downloadf_kwarg...,
+    force_bind::Bool = false, bind_metadata = nothing,
+    downloadf_kwarg...,
 ) =
-    download_my_artifact!(Downloads.download, url, name, artifacts_toml; force_bind, downloadf_kwarg...)
+    download_my_artifact!(Downloads.download, url, name, artifacts_toml; force_bind, bind_metadata, downloadf_kwarg...)
