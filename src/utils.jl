@@ -1,5 +1,24 @@
 ## utilities ##
 
+pkgversion(m::Module) = _pkgversion(joinpath(dirname(string(first(methods(Base.moduleroot(m).eval)).file)), "..", "Project.toml"))
+pkgversion(::Nothing) = _pkgversion(Scratch.ignore_eacces(()->Base.active_project()))
+function pkgversion(uuid::Base.UUID)
+    pkg = findfirst(o->o[1].uuid == uuid, Iterators.map(identity, Base.pkgorigins))
+    if pkg !== nothing
+        pkgorigin = Base.pkgorigins[pkg]
+        return _pkgversion(joinpath(dirname(pkgorigin.path), "..", "Project.toml"))
+    end
+    return nothing
+end
+
+function _pkgversion(project)
+    if project !== nothing && isfile(project)
+        toml = Pkg.TOML.parsefile(project)
+        haskey(toml, "version") && return Base.VersionNumber(toml["version"])
+    end
+    return nothing
+end
+
 # create pid lock at the same place of the given file
 create_file_lock(file, lock_name) = mkpidlock(joinpath(dirname(file), lock_name))
 create_file_lock(f::Function, file, lock_name) = mkpidlock(f, joinpath(dirname(file), lock_name))

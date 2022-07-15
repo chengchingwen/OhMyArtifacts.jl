@@ -16,13 +16,14 @@ export create_my_artifact, bind_my_artifact!, download_my_artifact!,
     my_artifact_path, my_artifact_exists
 
 """
-    my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
+    my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing}; versioned = false)
 
-Return the path to (or creates) "Artifacts.toml" for the given `pkg`.
+Return the path to (or creates) "Artifacts.toml" for the given `pkg`. If `versioned` is set to true,
+ we get a separate "Artifacts_<version number>.toml".
 
 See also: [`@my_artifacts_toml!`](@ref)
 """
-function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
+function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing}; versioned::Bool = false)
     # initialize OhMyArtifacts
     init()
 
@@ -36,7 +37,11 @@ function my_artifacts_toml!(pkg::Union{Module,Base.UUID,Nothing})
     Scratch.track_scratch_access(uuid, path)
 
     # create & return Artifacts.toml in `pkg` scratch space
-    return touch(joinpath(path, "Artifacts.toml"))
+    if versioned && (version = pkgversion(pkg)) !== nothing
+        return touch(joinpath(path, "Artifacts_v$version.toml"))
+    else
+        return touch(joinpath(path, "Artifacts.toml"))
+    end
 end
 
 include("./utils.jl")

@@ -14,6 +14,23 @@ macro my_artifacts_toml!()
     end
 end
 
+"""
+    @my_artifacts_toml!(versioned=true)
+
+Convenience macro that gets/creates a "Artifacts.toml" with version and parented to the package the calling module belongs to.
+
+See also: [`my_artifacts_toml!`](@ref)
+"""
+macro my_artifacts_toml!(ex::Expr)
+    if Base.isexpr(ex, :(=)) && length(ex.args) == 2 && ex.args[1] == :versioned
+        versioned = ex.args[2]
+        return quote
+            my_artifacts_toml!($(esc(__module__)); versioned = $(esc(versioned)))
+        end
+    end
+    error("Unknown arguments for @my_artifacts_toml!")
+end
+
 const ARTIFACTS_TOML_VAR_SYM = Ref{Symbol}(:my_artifacts)
 
 function get_artifacts_toml_sym()
