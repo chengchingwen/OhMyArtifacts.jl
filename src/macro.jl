@@ -76,21 +76,22 @@ macro my_artifact(op, name, ex...)
         kw_ex = Base.tail(ex)
         isempty(kw_ex) && return :(bind_my_artifact!($(toml_path), $(esc(name)), $(esc(hash))))
 
-        !isone(length(kw_ex)) && error("wrong number of keyword arguments for :bind, only `force`")
-        kw = kw_ex[1]
         bind_call = :(bind_my_artifact!($(toml_path), $(esc(name)), $(esc(hash)); ))
         kwargs = bind_call.args[2].args
-        if kw == :force
-            push!(kwargs, esc(kw))
-        elseif kw isa Expr && kw.head == :(=)
-            if kw.args[1] == :force
-                kw.head = :kw
+        length(kw_ex) > 2 && error("wrong number of keyword arguments for :bind, only `force` and `metadata`")
+        for kw in kw_ex
+            if kw == :force || kw == :metadata
                 push!(kwargs, esc(kw))
+            elseif kw isa Expr && kw.head == :(=)
+                if kw.args[1] == :force || kw.args[1] == :metadata
+                    kw.head = :kw
+                    push!(kwargs, esc(kw))
+                else
+                    error("unknown keyword argument for :bind : $(kw.args[1])")
+                end
             else
-                error("unknown keyword argument for :bind : $(kw.args[1])")
+                error("weird keyword argument for :bind : $kw")
             end
-        else
-            error("weird keyword argument for :bind : $kw")
         end
 
         return bind_call
