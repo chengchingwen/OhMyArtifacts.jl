@@ -1,6 +1,6 @@
 ## artifacts ##
 
-function _bind_single_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false)
+function _bind_single_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false, metadata = nothing)
     # Create a file lock with name `artifact_lock`. `load`/`unbind` would need to wait
     #   until `bind`ing finish
     artifact_lock = create_artifact_lock(artifacts_toml)
@@ -16,10 +16,13 @@ function _bind_single_artifact!(artifacts_toml::String, name::AbstractString, ha
             end
         end
 
-        meta =  Dict{String,Any}(
+        meta = Dict{String,Any}(
             "sha256" => string(hash),
             "isdir" => isdir(my_artifact_path(hash)),
         )
+        if !isnothing(metadata)
+            meta["meta"] = metadata
+        end
 
         artifact_dict[name] = meta
         # Write the result to file

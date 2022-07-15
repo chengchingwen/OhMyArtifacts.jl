@@ -131,15 +131,17 @@ function create_my_artifact(f::Function)
 end
 
 """
-    bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false)
+    bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false, metadata = nothing)
 
 Writes a mapping of `name` -> `hash` in the given "Artifacts.toml" file and track the usage. If `force`
- is set to `true`, this will overwrite a pre-existant mapping, otherwise an error is raised.
+ is set to `true`, this will overwrite a pre-existant mapping, otherwise an error is raised. By setting
+ `metadata`, we can store extra information in the `artifacts_toml` with field name `meta` of `name` entry.
 """
-function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256; force::Bool = false)
+function bind_my_artifact!(artifacts_toml::String, name::AbstractString, hash::SHA256;
+                           force::Bool = false, metadata = nothing)
     artifact_path = my_artifact_path(hash)
     @assert my_artifact_exists(hash) "artifact with hash $hash is not exist: must do `create_my_artifact` beforehand."
-    _bind_single_artifact!(artifacts_toml, name, hash; force)
+    _bind_single_artifact!(artifacts_toml, name, hash; force, metadata)
     if isdir(artifact_path)
         # artifact is a directory, track all subfiles
         for link in readdirfiles(artifact_path)
